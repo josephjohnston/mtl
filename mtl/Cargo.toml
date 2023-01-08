@@ -1,0 +1,28 @@
+[package]
+name = "mtl"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+objc = { package = "objc2", version = "=0.3.0-beta.3" }
+# icrate = { package = "icrate", version = "0.0.1", features = ["Foundation"] }
+block = { package = "block2", version="0.2.0-alpha.6" }
+bitflags = "1.3.2"
+
+[build-dependencies]
+cc = "1.0"
+
+[[example]]
+name = "sum"
+
+
+[[example]]
+name = "go"
+
+
+# [workspace]
+# members = [
+#     "examples/go"
+# ]

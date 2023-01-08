@@ -1,0 +1,54 @@
+
+Mutex usually used when already using Arc.
+Arc allows sharing values. Mutex allows mutating shared values.
+
+lets figure out what exactly is threadsafe for metal.
+one satisfying possibility is that only queues are threadsafe, meaning we can submit commands buffers from multiple threads.
+everything else we can also send between threads but they won't be operat
+
+the only thing we'll do for metal on multiple threads is create command buffers and encode them simultaneously. everythging else I imagine is independent. what about like creating resources in a multithreaded form? apparently we can use device from multible threads to create resources. this is creating new things. as long as we're not mutating, maybe even reading, the same stuff from multiple threads, we should be ok. what about modifyihg stuff like writing to the same texture? lets not rely on it. 
+so two use cases: create stuff from device, create and encode and submit command buffers. 
+this means device must be send+sync. the queue as well. stuff we create on a thread need not be threadsafe, cuz it won't change threads. 
+but now we may still want to pass our own stuff between threads, including metal stuff, we just got to be careful to have single writers. i guess that's what mutexes are for. maybe we don't need arc if we'll only work with something from one thread at a time. 
+so i think what metal-rs is doing is passing things around threads but only modifying from one thread at a time. this is perfectly fine, of course I think, and this is why there's always a lock before using a resource. 
+
+spawn by itself doesn't allow shaing references, only copying/moving values.
+solution is ARC. 
+ARC data is immutable. allocated on heap. it reference counts using atomic operations. 
+
+Send and Sync
+belongs to types. 
+Send if safe to send between threads.
+Sync if safe to share between threads, ie ref is safe to send. 
+raw pointers are !Send and !Sync, don't mark them as even though you can. cuz then containing types might be marked as threadsafe. instead mark the safe wrapper as threadsafe. 
+same with Rc
+UnsafeCell is !Sync
+should never have to unimplement these traits.
+types with simple inherited mutability can be Sync, i guess somehow threads don't complicate tracking the unique owner. &mut T is Sync if T is Sync. but that just means &(&mut T) is Send, and so you can read the value = &mut T but you can't mutate it. so just cuz you can read the mutable reference doesn't mean you own it. 
+Arc extends types to have threadsafe multiple ownership, not just refs and values. 
+Weak holds non-owning reference. 
+
+I think we understand enough about Send, Sync, and Arc right now. How would we use them?
+some things like devices we'll want to pass around threads and use. can we use them from multiple threads using only Sync? do we need Arc? 
+lets create something and try to mutate it in another thread. of course we can pass ownership between threads by just moving values. 
+Sync says we can pass references around. cuz maybe the main thread will panic while the other threads are still running. so we can only pass the value, not a reference. so i'm not sure how references are shared across threads. my question is whether when doing so you can call methods on it. i think so. as long as the methods don't take a mutable ref.
+so would it be enough for us to send reference to objects and allow stuff to be called not requiring mut refs? here the ownership would stay unique, I guess on main thread. i think this goes for both device and queue. i don't see any reason to use shared owneship. any use for mutex then either? we won't be modifying the value in other threads. 
+so we only mark some types as sync, and probably only sync, not send. these we must allow all non mutating calls to be threadsafe.
+in general, how do you pass values to other threads, without complaint the valued referred to may not live long enough?
+
+so we can use scoped threads ourselves or something like rayon. either way I think we just need to focus on making the right things sends and sync. 
+so multithreading is all about deciding what to make send and sync and how to do it. we want to do it without arc. how stuff get distributed over threads is a different issue. 
+what about async? for us here we reading inputs will be async and waiting for completions and such will be async. the rest is creating resources, running computations, populating resources, invoking functions, reading results. i think it makes sense to go async on these from the beginning. 
+but we're encoding computations which are deterministic. we'll be stepping through it in a specific way. it's not like we have an unordered sea of tasks to take care of and can do them in any order. so maybe better to continue synchronous. 
+well actually suppose we have generated the computation. might we divide the proving into many independent parts? even if so, we can process them orderly, i dont think we need async.
+maybe we'd have a runtime that combines zkp tasks of different kinds and organizes dispatches. 
+the only part we may need to make async now i think is the resource loading. 
+
+
+
+moves across threads cheap for pointers, anything on the heap, and other small stuff to copy. 
+closures contain both the data and the code for the new thread
+
+
+.lock().unwrap()
+

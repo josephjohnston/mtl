@@ -1,0 +1,14 @@
+[package]
+name = "hal"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mtl = { package = "mtl", path = "../mtl" }
+objc = { package = "objc2", version = "=0.3.0-beta.3" }
+# icrate = { version = "0.0.1", features = ["Foundation"] }
+block = { package = "block2", version="0.2.0-alpha.6" }
+half = "2.1.0"
+

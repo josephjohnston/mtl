@@ -1,0 +1,1 @@
+{"rustc":5585755218383029683,"features":"","target":0,"profile":0,"path":0,"deps":[[6227983291006255900,"build_script_build",false,2753572054613718338]],"local":[{"RerunIfChanged":{"output":"debug/build/zpu-6dd26fe29ce51a64/output","paths":["shaders/shader.metal"]}}],"rustflags":[],"metadata":0,"config":0,"compile_kind":0}

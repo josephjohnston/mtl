@@ -1,0 +1,115 @@
+
+xcrun -sdk macosx metal -gline-tables-only -frecord-sources add.metal -c -o add.air
+xcrun -sdk macosx metallib add.air -o add.metallib
+
+
+ISSUES TO REPORT
+1.
+metal-rs, lib.rs, try_objc
+they release the error, but according to memory policy, since it's returned by reference, they don't own it. and as the api says, it's autoreleased
+
+
+
+
+
+
+
+
+
+
+
+
+OBJC2
+
+a type may implement Message
+then any pointer and reference types to it will get MessageReceiver implemented
+then those types can be used in msg_send macro.
+its the type implementing Message that will actually be send the message via objc_msgSend.
+so Message represents an objC object.
+what implements Message must represent an objective-c object, by implementing RefEncode
+usually RefEncode is as Encoding::Object so we can re-interpret the type as runtime::Object
+actually need so be interpred as runtime::Object anyway, that's the contract. so if RefEncode is Encoding::Pointer(&Self::ENCODING) then can this be interpreted as runtime::Object?
+its this object that responds to retain, release, autorelease
+
+MessageReceiver can be reference or pointer to object, or to Id containing the object
+
+
+msg_send
+first must implement MessageReceiver
+args and return type must implement Encode
+translates to MessageReceiver::send_message
+the receiver is consumed (i think selector and args are too)
+may have trouble if receiver is mutable ref
+
+
+
+
+
+
+
+
+
+
+
+Encoding
+in objective-C the @encode directive converts a type into a string
+Encoding is an enum describing a type, and the Display trait yields the corresponding string
+
+Encode
+is an unsafe trait
+it just has an associated constant called ENCODING of type Encoding.
+this means a type that implements Encode has an associated encoding described by Encoding.
+not necessary for opaque types. 
+type (I guess implementing the Encode trait) should be FFI safe, meaning it has an C-compatible repr. 
+Objective-C uses the encoding to figure out the size and alignment and ABI and such of the type.
+So for a type implementing Encode, I think Self::ENCODING.to_string() should equal calling @encode on the same type in objective-C. 
+(he says when implementing Encode for Drop, and passed to ObjC via msg_send, the destructor won't be called. I guess he's just talking about how somethign like Drop where in rust it's called automatically, in objC it won't be called).
+instead of constructing encodings using Encoding, better to call ENCODING on subtypes (they implement Encode)
+
+RefEncode
+unsafe trait with associated constant ENCODING_REF of type Encoding
+whereas Encode is for types with an encoding, this is for types whose refs have an encoding. so you still implement it for the type T, and it serves for encodings for
+*const T
+*mut T
+&T
+&mut T
+NonNull<T>
+Option<&T>
+Option<&mut T>
+Option<NonNull<T>>
+
+implementing RefEncode for i16 gives the encoding Encoding::Pointer(&i16::ENCODING)
+so a type's ENCODING_REF is the type of a reference to the type. but here it's just a pointer to i16, I guess that single ref type is supposed to represent all those above.
+He says it's usually Encoding::Pointer(&Self::ENCODING) or Encoding::Object (also could be Encoding::Block|Class|Sel|Unknown )
+he says cumbersome if implement for all possible pointer types, so that must be why.
+now the refs to the object must be FFI safe (i guess cuz that's what's getting encoded)
+Self:REF_ENCODING.to_string() should match the @encode on an objC pointer to the type. 
+
+
+EncodeArguments
+an unsafe trait with associated constant ENCODINGS of type &'static [Encoding]
+he says it should not need to be implemented
+
+
+Object
+Id<Object, _> is equivalent to id
+
+
+RC
+
+Id is a smart pointer
+if Owned, can be mutably dereferenced
+if Shared, can be immutably dereferenced, do so by cloning
+owned can be converted to shared using Id::into_shared
+Id<T, _> retains T with a strong pointer, and releases it when T is dropped.
+Option<Id<T,O>> has the size of a pointer to the object
+Id<T, Owned> like std version of Box. 
+Id<T, Shared> like std version of Arc. 
+drop of T won't be called, since objC won't do so, use dealloc instead
+
+
+
+
+
+
+

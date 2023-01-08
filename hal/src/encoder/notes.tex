@@ -1,0 +1,260 @@
+
+\section{Performance}
+subsystems operate concurrently. limit counters say what percentage of cycles were devoted to each subsystem.
+reduction operations per subsystem.
+
+
+threadgroup memory is good for unstructured data
+imageblock memory is for structured data
+imageblocks persist for lifetime of tile.
+
+how do we more resources into threadgroup memory?
+maybe a single thread can do it with a single operation.
+
+so if we can use imageblocks just on ios, should we? yes, we should, they'll be worth it. if we can.
+
+it seems we can't use indirect command buffers at the same time as texture arguments. 
+when a compute pipeline supports indirect command buffers, all samplers must come from 
+
+we got "AIR builtin function was called but no definition was found" 
+this means i think non-apple gpu's just don't support them, including this one.
+so if we are to use them we'll need to execute on ios. 
+which brings us to the question, how are we going to develop on ios directly?
+so we need to decide now if imageblocks is worth switching to iphone. to do so we'd build a wrapper ios app, figure out how to plug in the rust lib, then run on simulator or ios.
+this is probably worth figuring out now in case we need to buy an adaptor. this will take a least a day. lets begin. 
+
+
+first recall how we connected to xcode. we made an external build system. and then we can run it. well, maybe we can just switch the device without a whole wrapper app. 
+
+what would a new comp give us?
+image blocks. but we need to make sure they can work on a compute pipeline.
+what else? indirect command buffers. 
+
+
+do all apple's have unified memory?
+we're relying on unified memory?
+well i guess imageblocks is primary. 
+
+we make compute passes with compute command encoders. 
+in a compute pass we have many compute commands
+each compute command has a pipeline. 
+in the command encoder we can set an imageblock size. 
+i guess the imageblock goes to each block.
+we also set threadgroup blocks but those go in an threadgroup memory argument table, so there can be multiple.
+can there be multiple imageblocks? well I guess we can declare multiple imageblocks as input. 
+looks like you're only allowed to use one, at least explicity. 
+
+how do you invoke compute functions in a render pipeline?
+
+i guess we're back to counters then. 
+but only like two are avaiable progrmatially. that's not a priority now. much higher is using all the counters in xcode. so we need to build an app. 
+
+goal 
+
+
+\section{CUDA Notes}
+
+blocks are paritioned into warps then scheduled.
+
+threads in a warp can have independent execution paths. 
+processor partitions shared memory among blocks and registers among threads. 
+all threads in a threadblock logically run in parallel. 
+warps may be scheduled in any order.
+a processor may execute multiple warps at the same time.
+since resources are already partitioned among all blocks and threads, switching warps has no overhead.
+
+are the resources of an SM partitioned only to those that are active, or to all resident threads?
+
+each (multi)processor has many cores. 
+
+threads in a threadblock are concurrent.
+
+in hardware threadblocks are 1d.
+threads are consecutively grouped into warps.
+convert from 3d to 1d using x, then y, then z. 
+warps_per_block = ceil(threads_per_block/warp_size)
+
+both threads and threadblocks execute concurrently.
+the whole thing is concurrent. but i still wonder if SM resources are partitioned among all blocks and threads, or just those resident.
+execution context of a warp is maintained for whole life. threfore, shared memory of a block should be there the whole time. now maybe a block is executed, then another. but this is not concurrent so won't hide concurrency. 
+the metric relevant here is the residency of blocks and threads. 
+so SMs can have more blocks/threads scheduled than can be resident at once I guess. 
+and of those resident, only some are active at a time.
+
+you want as much parallelism to hide latency but no more as that degrades resources. 
+
+are all warps in a block resident at once? yes, they must be, otherwise there'd be deadlock, because some must finish before others start, yet synchronization requires they all go together. 
+so only blocks, due to their independence, can go one after the other.
+
+active and resident with CUDA mean the same.
+of active warps, there's selected, stalled, and eligible.
+
+utiliztion is about resident warps, thus occupancy.
+
+required_warps = latency * throughput, average latency per instruction * warps executed per cycle.
+can also increase parallelism by haing more independent instructions within a thread. 
+
+all about a balance of resource utilization and latency hiding. 
+
+many multiple times the number of blocks as processors
+
+\section{Optimizations}
+
+Choose optimization goal.
+If compute bound, optimize for Gops / sec.
+if bandwidth bound, optimize for GB / sec. 
+go til you get the bound on the metric you're optimizing for. 
+another possibility is instruction bound (eg unroll loops).
+
+maximized independence (of course)
+maximize math/bandwidth (arithmetic intensity)
+since GPU prioritizes ALUs, not memory, sometimes better to recompute than to cache. 
+more computation on GPU to avoid data transfers, even if not so parallel
+when memory is aligned and sequential with i think no gaps, warps can coalesce memory. but each thread can't access like more than 256 bytes. 
+for textures optimize for 2d locality to take advantage of its dedicated cache. 
+avoid high-degree bank conflicts in shared memory.
+take advantage of shared memory, very fast. eg compute condition with a single thread and share with the rest. 
+use shared memory to avoid non-coalesced accesses by using it to i guess put temporary accesses and reorder them. ie non-linear from threads to shared memory, linear from shared memory to global memory. 
+there's no synchronization across threadblocks. 
+keeping resource usage low allows for multiple active threadblocks per processor. these resources are registers and shared memory. 
+structures of arrays are better than arrays of structures, this way you align it, and have seuqnetial access when accessing same field. think across threads in warp rather than across loads in thread. a struct with multiple types, compiler will do different loads from memory. 
+local memory is offchip like global memory, but per thread addressed -- thread scatch space. 
+should have at least twice as many blocks as processors, and each block should consume at most 1/k of the resources so can k concurrent blocks per processor. 
+more threads per block means fewer blocks per processor, but it allows more simd-group latency hiding. 
+at least 64 threads per block, but in this case have multiple blocks per processor. 
+higher than 256 threads per block then may not be able to run more than 1 block. 
+
+the larger the block the more latency with barriers as the more threads you wait on. 
+
+shared memory is as fast as registers when there's no bank conflicts. 
+
+\section{Occupancy}
+Measures how much concurrency capacity is being used.
+number of concurrently running warps divided by maximum allowed (eg process may have 24 instruction counters)
+these resident warps may belong to different blocks. 
+switching warps is basically free. 
+the more latency, the more important occupancy. without latency, like high arithmetic intensity, occupancy isn't so important. 
+for occupancy, maximize threads per processor. 
+put as much as possible before syncs, so whatever comes after sync relies on syncs. 
+
+
+
+\section{Reduction}
+
+We may have so large a reduction, with grid size so large we can't write all results to the same point. they need to be written to intermediate locations.
+then we need coordinate, being sure next layer only reads values already written.
+
+
+We'll probably like to reduce memory and increase arithmetic complexity.
+One way is by supporting more gates. In general, more complex integrands without incrasing data much.
+
+i guess lets work on a reduction algo, experimenting with how much each thread does, etc. 
+lets go through and implement algorithms we think may be useful before trying ZKP. 
+we might start with cuda anyway. 
+
+
+
+\section{Indirect Commands}
+
+can encode with multiple threads on the CPU, or with compute shaders on the GPU.
+what's the process?
+first we create a descriptor manually. 
+    then we set the command types.
+    we set inherit for pipeline and buffers
+then we create the indirect command buffer
+    to do so we need a resource options instance
+then we access compute commands via indices, already knowing how many commands are in the buffer.
+when we make the buffer private, we can't access the commands. i guess that means we can't encode them on the CPU.
+so now we have an indirect command buffer.
+set the pipeline, buffers, threagroup memory length, and stage in region, also barriers and dispatch. contrasting with normal compute encoding, there's no setting of bytes, no texture settings, no fences (that belongs to parent encode), 
+we can execute a range of commands in a command buffer, either specifying the range directly, or by reading the range from another buffer.
+
+also have the ability to dispatch indirectly and not using indirect command buffers.
+specify threadgroups per grid and threads per threadgroup. but the buffer just encodes the threadgroups per grid. 
+so it's basically a dispatch command with a variable size threadgroup grid. 
+similarly we can use a buffer to specify a region for stage-in data. i guess this makes sense as its related to the number of theadgroups.
+i guess this is all, create an indirect command buffer and configure the commands, then execute ranges of them from the parent encoder.
+
+then thousdand hours or the rest of my life. 
+
+
+
+\section{}
+
+we need to figure out how we'll be encoding.
+command buffers, passes, commands
+
+we were planning to have a single dispatch command that selected the pipeline and arguments and threads. but maybe we don't set all three each time.
+each time we set a pipeline we have to bind new arguments, unless they're in an argument buffer.
+and each time we use a pipeline we have to dispatch. 
+but since arguments are assigned by index, maybe we can leave some of them in place.
+
+
+\section{Synchronization}
+
+I think we only need to synchronize resources that Metal doesn't track, which for us is all resources.
+We use dispatch type concurrent, always, saying commands in an encoder may run concurrently.
+
+queue has command buffers
+    these are serial
+command buffer has passes
+    these are concurrent, synchronized by fences
+pass has commands
+    these are concurrent, synchronized by barriers
+
+\subsection{Barriers}
+
+Operates across commands in a single pass (encoder).
+
+BarrierScope is an enum with buffers or textures or both.
+these are the types a barrier can operate on. 
+
+on ComputeCommandEncoder we have:
+memoryBarrierWithScope:
+this accepts a scope, either buffers or textures, or both.
+commands in the encoder encoded before the barrier will complete before others are executed.
+their side effects will be visible to subsequent commands encoded by the encoder.
+this has no effect when calling on a serial encoder, only on a concurrent encoder.
+memoryBarrierWithResources:count:
+takes an array of resources in the form of a pointer and a count, and has the same effect.
+
+
+\subsection{Fences}
+
+They say it can work across command buffers on the forum.
+This makes sense as it's created from a device, and it operates on resources which may well last across command buffers, and command buffers are enqueued so there's still (like passes in a command buffer) a one dimensional form.
+Does not operate across queues, must use an event.
+
+
+Operates across passes (encoders) in a single command buffer.
+For interpass resource dependencies in a single command buffer.
+
+An event just has a device and a label.
+
+An encoder can wait for a fence at the beginning and/or then update a fence at the end.
+This is specified in the encoder.
+
+updateFence:
+updates the fence to capture all commands enqueued prior to and including the one just finished.
+waitForFence:
+no more gpu commands will be enqueued until the fence is reached. 
+
+does this make sense?
+we have a one dimensional queue of passes within a command encoder. each pass has commands that get enqueued.
+given a fence, we can update it to be at a certain place, or we can wait for it.
+Think of the one dimenstional line with steps the bounaries between passes. The fence moves along this boundary in jumps. 
+
+
+\subsection{Event}
+
+Works across command encoders and across queues.
+Create from a device. 
+
+An event is a 64 bit monotonically increasing unsigned integer.
+A command buffer encodes encodeSignalEvent:value: accepting an event and a value to update it to.
+Note by upding the event you may unblock other command buffers.
+Note the signal only occurs between passes.
+encodeWaitForSignal:value: again takes an event and a value, but instead of updating the event to that value, it pauses until the event reaches that value. 
+
+An event just has a device and a label.
+

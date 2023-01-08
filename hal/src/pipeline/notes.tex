@@ -1,0 +1,74 @@
+
+DYNAMIC LIBRARIES
+
+one of the two library types.
+have an existing library, either in metallib or Library, and pass either one to createDynamicLibrary of device. input is a library, output is a dynamic library. these are the two library types. 
+you can serialize the dynamic library to a metallib file.
+to reload a serialized dynamic lib, use newDynamicLibraryWithURL
+when you reload an archive, it takes memory, so this is why you want to split chaches up. 
+
+I still don't understand the purpose and usage of installName.
+
+I think here stack depth is important, which also is a property of the pipeline descriptor.
+any chain of dynamic function calls must consider stack depth.
+
+we can get dynamic libraries to work when creating the executable from a source string, but we don't know for the case of a metallib file (we don't know how to compile the file with externs that it doesn't compile but waits for linkage at runtime).
+
+wait for updates on questions, adjust as necessary, add support for dynamics later if deemed useful.
+
+
+LINKED FUNCTIONS
+
+we don't need external static linkage since we are authors of all shaders, and should two be created at different times and statically linked, we can combine them as sources.
+we don't use the other pars of linked fnctions since they are visible functions, i think equivalent to function pointers, and those are not performant. 
+
+
+SOURCE CODE
+
+here we need to start writing source coee. we need to figure out what the grammar and semantics are and what valid code looks like. 
+
+when we create libraries, 
+we'll archive pipelines, which hold only single funcitons. and i think we'll compile these functions individually. or we could compile libraries holding similar functions, this way we avoid duplicaiton of compilation. then we'll take the library right after and split/duplicate into pipeline functions, archive those, and dispose of the lbirary. henceforth there's duplciation. we could always regenerate the lbirary and rebuild pipelines.
+from the outside it should look like the ability to write a library of functions, select out qualified (we only have kernel) functions, compile and cache them to a pipeline, then later load the pipeline. of course you can save libraries and functions, and rebuild later. but this rebuilding process, which is both compilation from source, and pipeline creation, is a single expensive process. 
+
+
+Stitched functions:
+
+graph. nodes are functions. connect inputs and outputs. 
+
+Binding:
+access: read, write, readwrite
+index: usize
+argument: bool
+used: bool
+name: string
+type: buffer, texture, threadgroup memory, 
+
+Buffer binding:
+alignment: usize,
+data size: usize,
+data type: dataType,
+pointer type: pointerType
+
+Pointer type:
+alignment: usize,
+data size: usize,
+element type: dataType,
+access: read, write, readwrite,
+element is arg buffer: bool,
+element array type: arrayType,
+element struct type: structType,
+
+Array type:
+array length: usize,
+element type: dataType,
+stride: usize,
+
+so now we compile all by file, build files, archive or not, just an api that programs and delivers pipelines. they should be distinct. note only relevant for compute.
+
+
+
+
+
+
+

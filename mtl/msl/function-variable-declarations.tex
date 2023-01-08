@@ -1,0 +1,114 @@
+
+
+\section{Functions}
+
+kernel, vertex, and fragment attributes, short for [[kernel]], [[vertex]], [[fragment]]
+also have [[visible]], [[stitchable]], [[intersection(..)]], [[object]], [[mesh]]
+these attributes at the start of a function make it accessible to the Metal API, making it a qualified function (for us only qualified functions are kernel and visible and stitchable)
+kernel, vertex, and fragement attributes can call visible functions.
+refer to qualified function f in namespace np as np::f.
+
+functions declared with kernel attribute must return void
+can specify [[max_threads_per_threadgroup(N)]], fails if N is greater than device.maxThreadsPerThreadgroup
+[[visible]] functions are visible from the Metal API, ie you can get a MTLFunction from it can get a pointer to a visible function, which can be used with the visible_function_table. other functions can directly call a visible function.
+[[visible]] float my_visible(device int *data, int data_offset) {}
+[[stitchable]] functions can be used in Function Stitching API. stitchable implies visible. compiler will generate some metadata, increasing code size, only use if necessary.
+[[stitchable]] float my_stitchable(device float *data, texture2d<float> tex) {}
+
+use [[host_name(name)]] to use name in the API
+
+can use templates with qualified function declarations
+template<typename T>
+kernel void bar(device T *x) {}
+template kernel void bar(device int *x);
+template [[host_name("bar_int")]] kernel void bar(device int *x);
+template [[host_name("bar_float")]] kernel void bar(device float *x);
+
+Function Arguments and Variables
+most inputs pass as arguments, except for vars in constant address space and sample (only?) in program address space.
+argument include
+1. device buffer (any pointer or ref to any data type in device space)
+2. constant buffer (ditto for constant space)
+3. texture object
+4. texture_buffer
+<!-- 5. sampler -->
+6. pointer to threadgroup address space (buffer shared between threads in threadgroup)
+<!-- 7. imageblock -->
+8. argument buffer
+9. visible function table
+<!-- 10. intersection function table -->
+<!-- 11. acceleration structure -->
+12. structure with elements buffers, textures, texture buffers. 
+
+buffers in device or constant space can't alias for same function.
+can't use size_t (or anyting containing size_t) for arguments
+attributes help specify arguments regarding resource location and built-in variables (for communication with fixed-function stages)
+
+optional attribute for any argument specifying location 
+device and constant buffers: [[buffer(index)]]
+textures (including texture buffers): [[texture(index)]]
+sampler: [[sampler(index)]]
+threadgroup buffers: [[threadgroup(index)]]
+index is unsigned
+
+kernel void add_vectors(
+    const device float4 *inA [[buffer(0)]],
+    const device float4 *inB [[buffer(1)]],
+    device float4 *out [[buffer(2)]],
+    uint id [[thread_position_in_grid]]
+) {
+    out[id] = inA[id] + inB[id]
+}
+
+[[kernel]] void
+my_kernel(
+    device float4 *p [[buffer(0)]],
+    texture2d<float> img [[texture(0)]],
+    sampler sam [[sampler(1)]]
+) {}
+
+kernel void
+my_kernel(
+    texture2d<half> src,
+    texture2d<half, access::write> dst,
+    sampler s,
+    device myUserInfo *u
+) {}
+
+attributes buffer, texture, sampler, threadgroup represent groups of resources
+indices must be unique within each group
+
+struct VertexOutput {
+    float4 position [[position]];
+    float4 color;
+    float2 texcoord;
+};
+struct VertexInput {
+    float4 position;
+    float3 normal;
+    float2 texcoord;
+};
+constexpr const uint MAX_LIGHTS = 4;
+struct LightDesc {
+    uint num_lights;
+    float4 light_position[MAX_LIGHTS];
+    float4 light_color[MAX_LIGHTS];
+    float4 light_attenuation_factors[MAX_LIGHTS];
+}
+vertex void
+render_vertex(
+    const device VertexInput* v_in [[buffer(0)]],
+    constant float4x4& mvp_matrix [[buffer(1)]],
+    constant LightDesc& light_desc [[buffer(2)]],
+    device VertexOutput* xform_output [[buffer(3)]],
+    uint v_id [[vertex_id]],
+) {
+    VertexOutput v_out;
+    v_out.position = v_in[v_id].position * mv_matrix;
+    v_out.color = do_lighting(v_in[v_id].position,v_in[v_id].normal, light_desc);
+    v_out.texcoord = v_in[v_id].texcoord;
+    xform_output[v_id] = v_out;
+}
+
+inputs can be had by intedxing into buffers with ids, or by using [[stage_in]]
+

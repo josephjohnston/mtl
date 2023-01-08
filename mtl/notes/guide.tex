@@ -1,0 +1,55 @@
+
+What's the basic model, the hierarchy, what creates what?
+
+device creates queue
+send command buffers to the queue
+
+GUESS
+
+device creates buffers and queue
+queue creates command buffers
+command buffer creates encoders
+encoders are the passes
+onlhy one pass at a time
+device creates pipeline state
+the encoder will set the pipeline and its arguments. 
+it can use multiple pipelines
+
+
+command buffer commits itself
+enqueue a command buffer using CommandBuffer. also use to check status
+
+CommandQueue -> CommandBuffer -> CommandEncoder
+
+command encoders deal with resources and state
+
+command buffers and encoders are transient. they are lightweight and you can't reuse them.
+command buffers are the only independently trackable unit of work. they establish the coherency boundaries of the memory model
+
+commit makes an implied enqueue call if not previously enqueued
+
+an render/compute encoder takes care of a single pass
+associated with a pass descriptor
+there are resources, and there is pipeline state which is compiled instructions, also there's fixed function state.
+
+can pass command buffers around threads, but only thread per command buffer at a time
+
+usually an entire render frame is encoded into a single command buffer
+
+do pipelines and passes map 1 to 1?
+
+
+
+
+MEMORY
+
+NS_RETURNS_RETAINED
+it seems like the function returning the value calls retain before it returns, thus returning a value with +1 retain count. this is what Id::new is for, it doesn't call retain. 
+i guess everything needs to be released, and everything released first needs to be retained.
+when creating something, we call alloc, then init. when is it retiained?
+When an object is created, i guess with alloc, whereever that happens the retain count is 1.
+So if the method we call creates the object, it returns with retain count 1, and we call Id::new.
+when do we call retain_autoreleased? whenever we know the object was autoreleased. then i guess retain for all else. 
+sometimes we'll need to create something nad pass it on, return it from a method,
+whats the difference between moving it, and autorelease returning then autorelease retaining? well this is useful when declaring own objective-c methods. but when just staying on rust side we don't need it. 
+
