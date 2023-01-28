@@ -1,8 +1,204 @@
-use zpu::*;
+use rand::Rng;
 
+mod numbers;
+use numbers::*;
+
+#[allow(arithmetic_overflow)]
 fn main() {
-    rust_addition(1, 2);
+    let pG: u128 = (1 << 64) - (1 << 32) + 1;
+    // let pH: u32 = ((1 << 32) as u64 - (1 << 24) + (1 << 16) - (1 << 8) + 1) as u32;
+    // ((2 as u64).pow(32) - (2 as u64).pow(24) + (2 as u64).pow(16) - (2 as u64).pow(8) + 1)
+    //     as u32;
+    // for a in (2 as u32).pow(16)..(2 as u32).pow(31) {
+    //     for b in (2 as u32).pow(16)..(2 as u32).pow(31) {
+    let mut rng = rand::thread_rng();
+
+    for i in (pG - (1 << 14))..pG {
+        for j in (pG - (1 << 14))..pG {
+            let a = rng.gen::<u64>();
+            let b = rng.gen::<u64>();
+            // let a = 628008511146584023;
+            // let b = 14368702434318396250;
+            let result = G::mult(a, b);
+            let correct = (a as u128) * (b as u128) % pG;
+            // println!("{}", correct);
+            if result != (correct as u64) && result - (pG as u64) != (correct as u64) {
+                println!("{a},{b},{result},{correct}");
+                panic!();
+            }
+        }
+        // let correct = (a as u64) * (b as u64) % (p as u64);
+        // if result != correct as u32 && result - p != correct as u32 {
+        //     println!("{a},{b},{result},{correct}");
+        //     panic!();
+    }
 }
+
+// fn main() {
+//     let p = (2 as u64).pow(42)
+//         + (2 as u64).pow(35)
+//         + (2 as u64).pow(28)
+//         + (2 as u64).pow(21)
+//         + (2 as u64).pow(14)
+//         + (2 as u64).pow(7)
+//         + 1;
+//     let alow = 1 as u16;
+//     let ahigh = 1 as u32;
+// }
+
+// use primal::*;
+// fn main() {
+//     let mut p = 0;
+//     // let lower_bound = 1 << 31;
+//     // let upper_bound = 1 << 32;
+//     // let mut b3: Vec<u32> = vec![0; 10];
+//     // let mut b5: Vec<u32> = vec![0; 10];
+//     // let mut b5: Vec<u32> = vec![0; 10];
+
+//     // let mut b5:
+
+//     // let top: u64 = 0xffffffffffffffff;
+//     for k in ((1 << 56) - (1 << 8))..(1 << 56) {
+//         if k % 2 == 0 {
+//             continue;
+//         }
+//         p = k * (1 << 8) + 1;
+//         // let diff = 64 - 10;
+//         if is_prime(p) {
+
+//     let mut d3 = 0;
+//     let mut d5 = 0;
+//     let mut d7 = 0;
+//             // let r = (p << diffß
+//             for i in 0..10 {
+//                 if k % (3 as u64).pow((i as u32) + 1) == 0 {
+//                     d3 += 1;
+//                 }
+//                 if k % (5 as u64).pow((i as u32) + 1) == 0 {
+//                     d5 += 1;
+//                 }
+//                 if k % (7 as u64).pow((i as u32) + 1) == 0 {
+//                     d7 += 1;
+//                 }
+//             }
+//             let dt = 1.5849 * (d3 as f32) + 2.3219 * (d5 as f32) + 2.8073 * (d7 as f32);
+//             // if dt > 8.0 {
+//             println!("p: {}, k: {}, dt: {}", p, k, dt);
+//             // }
+//             // println!("p: {}, k: {}", p, k);
+//         }
+//     }
+// }
+
+// fn pow(x: u32) -> u32 {
+//     (2 as u32).pow(x)
+// }
+
+// const P4: usize = 2 * 2 * 2 * 2;
+// const P8: usize = P4 * P4;
+// const P16: usize = P8 * P8;
+// fn main() {
+//     let mut results: [u32; P16] = [0; P16];
+//     for i in 0..pow(16) {
+//         let Y = pow(3) - 1;
+//         let Z = (Y << 12) as usize;
+//         if (i as usize) & Z == Z {
+//             continue;
+//         }
+//         let x = f16::from_bits(i as u16).to_f32();
+//         for j in 0..pow(16) {
+//             let Y = pow(3) - 1;
+//             let Z = (Y << 12) as usize;
+//             if (j as usize) & Z == Z {
+//                 continue;
+//             }
+//             let y = f16::from_bits(j as u16).to_f32();
+//             let r = f16::from_f32(x * y);
+//             let address = usize::from(r.to_bits());
+//             results[address] += 1;
+//             let Y = pow(5) - 1;
+//             let Z = (Y << 10) as usize;
+//             if (r.to_bits() as usize) == Z {
+//                 println!("x: {:b}, {}", x.to_bits(), x);
+//                 println!("y: {:b}, {}", y.to_bits(), y);
+//             }
+//         }
+//     }
+
+//     // let max = results.iter().max().unwrap();
+//     // let index = results.iter().position(|element| element == max).unwrap();
+//     // for k in (0..results.len()).rev() {
+//     //     if k % (pow(4) as usize) == 0 {
+//     //         println!(
+//     //             "{binary:016b}, {hits}, {float}",
+//     //             hits = results[k],
+//     //             binary = k,
+//     //             float = f16::from_bits(k as u16),
+//     //         );
+//     //     }
+//     // }
+// }
+
+// use primal::*;
+
+// fn main() {
+//     let p = Primes::all().nth(10001 - 1).unwrap();
+//     println!("{}", p);
+// }
+
+// fn pow(x: u32) -> u64 {
+//     u64::pow(2, x)
+// }
+// fn comp(x0: u64, x1: u64, x2: u64, x3: u64) -> u64 {
+//     pow(0) * x0 + pow(8) * x1 + pow(16) * x2 + pow(24) * x3
+// }
+
+// fn main() {
+//     let N = pow(32) - pow(24) + pow(16) - pow(8) + 1;
+
+//     let a = (1, 1, 1, 1);
+//     let b = (1, 1, 1, 1);
+
+//     let c0 = a.0 * b.0;
+
+//     let c1 = a.0 * b.1 + a.1 * b.0;
+
+//     let c2 = a.0 * b.2 + a.1 * b.1 + a.2 * b.0;
+
+//     let c3 = a.0 * b.3 + a.1 * b.2 + a.2 * b.1 + a.3 * b.0;
+
+//     let c4 = a.1 * b.3 + a.2 * b.2 + a.3 * b.1;
+
+//     let c5 = a.2 * b.3 + a.3 * b.2;
+
+//     let c6 = a.3 * b.3;
+
+//     // let c = (N + c0 - c5 + c4, N + c1 - c6 - c4, c2 + c4, N + c3 - c4);
+//     let c = (
+//         N + c0 - c4 - c5,
+//         c1 + c4 - c6,
+//         N + c2 - c4,
+//         c3 + c4,
+//         0,
+//         0,
+//         0,
+//     );
+
+//     // let C = pow(0) * c.0
+//     //     + pow(8) * c.1
+//     //     + pow(16) * c.2
+//     //     + pow(24) * c.3
+//     //     + pow(32) * c.4
+//     //     + pow(40) * c.5
+//     //     + pow(48) * c.6;
+
+//     println!("{}", N);
+//     // println!("{:?}", (c0, c1, c2, c3));
+//     println!("a: {}", comp(a.0, a.1, a.2, a.3));
+//     println!("b: {}", comp(a.0, a.1, a.2, a.3));
+//     println!("c: {}", comp(c.0, c.1, c.2, c.3));
+//     // println!("C: {}", C);
+// }
 
 // #[link(name = "zpu")]
 // extern "C" {

@@ -8,5 +8,8 @@ edition = "2021"
 
 [dependencies]
 # hal = { path = "../hal" }
-zpu = { path = "../zpu" }
+# zpu = { path = "../zpu" }
 # zpu = "0.1.0"
+primal = "0.3.2"
+rand = "0.8.5"
+# half = "2.2.1"

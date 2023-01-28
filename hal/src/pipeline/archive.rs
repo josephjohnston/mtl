@@ -75,7 +75,7 @@ impl<'a> Archive<'a> {
 
         let label = NSString::from_str(name_str);
 
-        let bundle = Bundle::get_bundle().unwrap();
+        // let bundle = Bundle::get_bundle().unwrap();
         // let library_url = bundle
         //     .url_for_resource(
         //         &NSString::from_str("shader_ios"),

@@ -1,0 +1,173 @@
+
+Mersenne Primes
+
+Reduction algorithms include
+Montgomery multiplication
+    have R=2^k with gcd(R,N)=1, useful only when R > N
+    Montgomery form of x is xR mod N
+    multiplication by R is an iso
+    let R' be inverse of R mod N.
+    multiply to get xyRR, then by R^{-1} to get xyR
+    and some other stuff
+Barrett Reduction
+    seems just 
+
+
+f(2^k) where f is low degree with small coefs
+
+
+
+apparently choice of prime affects FFT
+
+
+Reading Plonky2 investigation:
+
+2-acidity needs to be large, i think that means a large 2-exponent in the multiplicative group
+Sylow subgroups:
+    a Sylow p-subgoup is a maximal p-group, that is a group of order a power of p not a proper subgroup of any other p-group.
+Theorem 1: if p^n is max and divides order, then there is subgroup of order p^n.
+Theorem 2: all Sylow p-subgroups are conjugates, ie exists g st. g^{-1}Hg = K.
+Theorem 3: let n_p be the number of Sylow p-subgroups, where p^n*m = |G|
+    1. n_p | m
+    2. n_p = 1 mod p
+    3. n_p = |G : N_G(P)|, P any Sylow p-subgroup, and N_G normalizer
+by Theorem 2, P is normal if n_p = 1
+
+
+if we want cyclotomics we need a prime. recall our limitation is mostly with arithmetization, identity testing, not commits. commits we could use power of 2, identity testing we cant. 
+for identity testing we could put in some small factors, but we still need one giant prime factor.
+what can small factors buy us? they won't enable use to use cyclotomics, so they cost there. but they might be useful for arithmetization tricks but with only a few factors we can only use them in a few ways, eg branching with a few branches.
+eg (2^31-1)2 is 32 bit. 
+how to use extra factors? well we have subgroups, focus on example above. i think this means we can do Z_2 operations, eg XOR and AND.
+if we find this useful, maybe we could just encode the subgroup info of an element in extra bits, still using the prime and cyclotomics for commits. 
+so our decision is to stick with prob 32 bit prime and cyclotomics, but if worth it for arithmetizaiton we can move into 'extensions' of this prime, eg matrix algebra over Z mod the prime with other factors. we need to translate between prime and its extensions, and we need to make full use of the extension for expressing otherwise cumbersome logic.
+maybe we could even simulate the extension in commits, eg depending what subgroup commit to a different tree.
+regardless the extension, we should still be able to use multiplication mod p algo.
+
+
+
+
+Now we want to use the structure of our prime itself, in addition to its extension, for efficiency and hopefully tricks. it forms a prime field. we don't have the option here for extension fields, except by extension. this might be a more efficient in time or space option to repetition. 
+first criterion is it must work for our cyclotomic. for the moment we'll go with power of 2 cyclotomic, and we'll use largest ring size we can.
+
+recall the tradeoffs of cyclotomics.
+ring size is one. we can handle maximal ring size since we're not ALU bound.
+but what's the irreducible size? oh right, it's just an arithmetic / challenge tradeoff, and we want it to split as much as it can for free, not requiring extra challenges, so that depends on the prime. well, we can experiment, we're not sure the extract tradeoff, but we'll split into like size 4 maybe 2. recall how we wanted to support multiple, one optimized for commits (more splitting), one for succinctness (less splitting). that was done using the same prime but different cyclotomics, the one with more splitting not a power of 2. still a possibility i guess. 
+we also need to consider the prime wrt FFT.
+
+in theory repetition is more efficient than extension.
+
+
+what's our goal here? to get familiar with the aglebraic tools we'll use. to choose our prime. to know how to choose primes.
+this will be prime field (and cyclotomic) focused i think. 
+
+how to choose prime size?
+we want it efficiently stored, so like 32 or 64 bit. both should be large enough. can't really go lower. we want to minimize the SIS size. yet we need input/output ratio 2-1. if we use 64 then we should double the commit bits which means more decoding and doesn't really help for increasing overflow. 
+
+2^4 / 2^32 = 2^{32 - 4}
+2^64 / 2^8 = 2^{64 - 8}
+
+it may well be that 64 bit is just as efficient (maybe not if you still need initial multiplication).
+by doubling bits to decode we can keep ratio same as for 32 bit, while increasing overflow.
+an issue is security, since we've asked to halve SIS degree for double field size.
+
+
+look at what constraint there is on prime due to cyclotomic
+and what constaint there is due to arithmetization like NTT
+look at RISC0's prime implementation
+    maybe worth trying it. that's a good first implementation project.
+figure out how to find a prime. we're only using one prime for now.
+
+RISC0
+    https://github.com/risc0/risc0/tree/c856a6890a1a84502274ba86586ab3a584327494/risc0/zkp/kernels/metal
+
+maybe first read about FFT, then on primes, as former is dependent on latter
+first to recall algebra, including cyclotomics
+
+
+
+Mapping and Lifting
+base B clumping is Z -> Z[y]/(B-y) -> Z[y]
+reduction is to save time in later ops, so balance against time to reduce
+
+\section{Karatsuba multiplication}
+Suppose we wish to multiply two polynomials $s_1,s_2\in\R[X]$ in ring $\R$ of degree at most $d$.
+Let $p\in\R[X]$ be a monic polynomial of degree $k\leq 2d$, so on dividing the product by $p$ there exists quotient $q\in\R[X]$ of degree at most $2d-k$ and remainder $r\in\R[x]$ of degree at most $k-1$ such that
+\begin{equation}
+    s_1(X)\cdot s_2(X) = q(X)\cdot p(X) + r(X)
+\end{equation}
+We will compute the product on the left side by computing the quotient and remainder on the right side.
+To compute the remainder, we delegate to a black-box algorithm for multiplying polynomials modulo $p$.
+To compute the quotient, we can perform normal polynomial division.
+The division algorithm is fastest when $q$ is low degree, meaning $p$ is of high degree up to $2d$.
+In this case, one may compute $q$ in time $\O(1)$, and one is then left to multiply the result by $p$ in time $\O(k)$, lastly adding to $r$ in time $\O(d)$.
+Computing $r$ remains, consuming the most time regardless the black-box algorithm.
+
+In the special case of Karatsuba multiplication, we have $d=1$ and $k=2d=2$.
+With $k=2d$ we minimize the time to compute $q$, and with $d=1$ we minimize the time to compute $r$ (for larger $d$ one may apply the algorithm recursively).
+As for $p$, any monic, quadratic polynomial will do, but choice affect efficiency.
+Best choice of $p$ depends on what form the final quadratic result $s_1(x)\cdot s_2(x)$ should take.
+If any form is valid, we best choose $p(x)\coloneq s_1(x)\cdot s_2(x)$, this way $r=0$ and $q=1$.
+Whatever the form desired, we best choose $p$ such that reducing a polynomial in the form modulo $p$ is most efficient.
+Let us focus on the standard coefficient form.
+Then a choice of the form $p(x)\coloneq x^{t_1}\pm x^{t_2}$ for distinct $t_1,t_2\in\{0,1,2\}$ is efficient.
+Reducing a quadratic in coefficient form modulo such a $p$ means replacing monomial $x^{t_1}$ with $\mp x^{t_2}$, thus effectively adding or subtracting one coefficient from another.
+Classic Karatsuba multiplication uses $p(x)\coloneq x^2-x$.
+
+how to apply method? 
+we want to compute r using p in as few steps as possible.
+we may need to edit, we said any for of p applicable to coef form.
+that doesn't seem true. 
+by choosing x^2 - x, we compute b1*b2 and add to x
+(a1+b1)(a2+b2) - a1*a2 = 
+
+really we want to compute r with least multiplications.
+x^2-1
+then constant is
+a1*a2 + b1*b2
+taking two multiplications and an addition
+and linear is
+a1*a2 + b1*b2 = (a_1+b_1)(a_2+b_2) - (a1*a2 + b1*b2)
+taking one multiplication and three additions.
+then we need to set b1*b2 the quadratic, and subtract b1*b2 from scalar. 
+
+with regular, b1*b2 instead adds to the middle so its (a_1+b_1)(a_2+b_2)-a1*a2. 
+
+use x^2-x or x^2-1, what about +?
+both give right answer in different orders.
+both require computing b1*b2 and adding to another coef.
+\begin{equation}
+    s_1(x)\cdot s_2(x) = (a_1+b_1x)(a_2+b_2x)
+\end{equation}
+
+
+
+we can use cyclotmics to multiply polys in any ring efficiently.
+http://www.cs.technion.ac.il/users/wwwb/cgi-bin/tr-get.cgi/1986/CS/CS0418.pdf
+uses powers of cyclotomics for Toom's trick, they are coprime in Z[X] therefore coprime in R[X]
+but there's too many additions
+
+
+NTT Trick
+
+we use the structure of the prime for Karatsuba multiplication.
+we choose p i guess to be this prime.
+a1*a2 + [(a1+b1)(a2+b2)-(a1*a2+b1*b2)]x + b1*b2*x^2
+p(x) = x^2 - x + 1
+a1*a2+(b1*b2)(x-1) + [(a1+b1)(a2+b2)-(a1*a2+b1*b2)]x
+(a1*a2-b1*b2) + [(a1+b1)(a2+b2)-a1*a2]x
+p(2^k) = 2^{2k} - 2^k + 1
+2^{3k}+1 = 2^k*2^{2k}+1 = 2^k(2^k-1)+1 = 2^{2k}-2^k+1 = 0
+so when k is even w=2^{3k/2} and w^2 = -1, for k=32, that's 2=2^48
+
+start with 2^3. double til reaching 48. 
+
+
+they do a full Karatsuba multiplication, using 32 bits, so that's something we could do potentially. we need to do reduction though, so we can't let it overflow mod 2^32. we need the result, so we'll need 64 bits. 
+
+
+
+
+
+
+

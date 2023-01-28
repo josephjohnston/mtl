@@ -31,34 +31,34 @@ kernel void reduce_neighborhood(
     uint bid [[threadgroup_position_in_grid]],
     uint dim [[threads_per_threadgroup]]
 ) {
-    // ushort2 z = ushort2(0,0);
-    // threadgroup_imageblock Foo *f = img_blk.data(z);
-    // f->b = 17;
-    // g_idata[0] = f->b;
+    ushort2 z = ushort2(0,0);
+    threadgroup_imageblock Foo *f = img_blk.data(z);
+    f->b = 19;
+    g_idata[0] = f->b;
 
-    device int *idata = g_idata + dim * bid;
-    // 1
-    if(lid % 2 == 0) {
-        idata[lid] += idata[lid + 1];
-    }
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    if(lid % 4 == 0) {
-        idata[lid] += idata[lid + 2];
-    }
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    if(lid % 8 == 0) {
-        idata[lid] += idata[lid + 4];
-    }
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    if(lid % 16 == 0) {
-        idata[lid] += idata[lid + 8];
-    }
-    // 2
-    int index = 2 * lid;
-    if(index < bid) {
-        idata[index] += idata[index + 1];
-    }
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+    // device int *idata = g_idata + dim * bid;
+    // // 1
+    // if(lid % 2 == 0) {
+    //     idata[lid] += idata[lid + 1];
+    // }
+    // threadgroup_barrier(mem_flags::mem_threadgroup);
+    // if(lid % 4 == 0) {
+    //     idata[lid] += idata[lid + 2];
+    // }
+    // threadgroup_barrier(mem_flags::mem_threadgroup);
+    // if(lid % 8 == 0) {
+    //     idata[lid] += idata[lid + 4];
+    // }
+    // threadgroup_barrier(mem_flags::mem_threadgroup);
+    // if(lid % 16 == 0) {
+    //     idata[lid] += idata[lid + 8];
+    // }
+    // // 2
+    // int index = 2 * lid;
+    // if(index < bid) {
+    //     idata[index] += idata[index + 1];
+    // }
+    // threadgroup_barrier(mem_flags::mem_threadgroup);
 
     // if idx > n return
     // for(int stride = 1; stride < dim; stride *= 2) {
@@ -70,9 +70,9 @@ kernel void reduce_neighborhood(
     // if (lid == 0) {
     //     g_odata[threadgroup_in_grid] = idata[0];
     // }
-    if(lid == 0) {
-        g_odata[bid] = idata[0];
-    }
+    // if(lid == 0) {
+    //     g_odata[bid] = idata[0];
+    // }
 }
 
 // xcrun -sdk macosx metal shader.metal -c -o shader.metallib
