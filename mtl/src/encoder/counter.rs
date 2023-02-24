@@ -62,7 +62,6 @@ impl CounterSampleBufferDescriptor {
 
 // [Pr] MTLCounterSampleBuffer
 declare!(CounterSampleBuffer);
-impl Label for CounterSampleBuffer {}
 impl CounterSampleBuffer {
     // [P] device
     pub fn device(&self) -> Id<Device> {
@@ -73,8 +72,8 @@ impl CounterSampleBuffer {
         unsafe { msg_send![self, sampleCounte] }
     }
     // [M] resolveCounterRange:
-    pub fn resolve_counter_range(&self, range: &NSRange) -> Id<NSData> {
-        unsafe { msg_send_id![self, resolveCounterRange: range] }
+    pub fn resolve_counter_range(&self, range: std::ops::Range<usize>) -> Id<NSData> {
+        unsafe { msg_send_id![self, resolveCounterRange: NSRange::from(range)] }
     }
 }
 
@@ -107,7 +106,7 @@ impl BlitPassSampleBufferAttachmentDescriptor {
     pub fn set_start_of_encoder_sample_index(&self, index: usize) {
         unsafe { msg_send![self, setStartOfEncoderSampleIndex: index] }
     }
-    // [P] startOfEncoderSampleIndex and setStartOfEncoderSampleIndex
+    // [P] endOfEncoderSampleIndex and setEndOfEncoderSampleIndex
     pub fn end_of_encoder_sample_index(&self) -> usize {
         unsafe { msg_send![self, endOfEncoderSampleIndex] }
     }
@@ -143,6 +142,23 @@ impl ComputePassSampleBufferAttachmentDescriptor {
     pub fn sample_buffer(&self) -> Id<CounterSampleBuffer> {
         unsafe { Id::retain(msg_send![self, sampleBuffer]).expect(ID_RETAIN_FAILURE) }
     }
+    pub fn set_sample_buffer(&self, sample_buffer: &CounterSampleBuffer) {
+        unsafe { msg_send![self, setSampleBuffer: sample_buffer] }
+    }
+    // [P] startOfEncoderSampleIndex and setStartOfEncoderSampleIndex
+    pub fn start_of_encoder_sample_index(&self) -> usize {
+        unsafe { msg_send![self, startOfEncoderSampleIndex] }
+    }
+    pub fn set_start_of_encoder_sample_index(&self, index: usize) {
+        unsafe { msg_send![self, setStartOfEncoderSampleIndex: index] }
+    }
+    // [P] endOfEncoderSampleIndex and setEndOfEncoderSampleIndex
+    pub fn end_of_encoder_sample_index(&self) -> usize {
+        unsafe { msg_send![self, endOfEncoderSampleIndex] }
+    }
+    pub fn set_end_of_encoder_sample_index(&self, index: usize) {
+        unsafe { msg_send![self, setEndOfEncoderSampleIndex: index] }
+    }
 }
 
 // [C] MTLComputePassSampleBufferAttachmentDescriptorArray
@@ -157,6 +173,34 @@ impl ComputePassSampleBufferAttachmentDescriptorArray {
             Id::retain(msg_send![self, objectAtIndexedSubscript: attachment_index])
                 .expect(ID_RETAIN_FAILURE)
         }
+    }
+    // [M] setObject:atIndexedSubscript:
+    pub fn set_object_at_indexed_subscript(
+        &self,
+        attachment: &ComputePassSampleBufferAttachmentDescriptor,
+        index: usize,
+    ) {
+        unsafe { msg_send![self, setObject: attachment, atIndexedSubscript: index] }
+    }
+}
+
+// [T] MTLTimestamp
+// pub type Timestamp = usize;
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Timestamp {
+    pub value: usize,
+}
+unsafe impl Encode for Timestamp {
+    const ENCODING: Encoding = Encoding::Struct("Timestamp", &[usize::ENCODING]);
+}
+unsafe impl RefEncode for Timestamp {
+    // const ENCODING_REF: Encoding = Object::ENCODING_REF;
+    const ENCODING_REF: Encoding = Encoding::Pointer(&usize::ENCODING);
+}
+impl Timestamp {
+    pub fn new(value: usize) -> Self {
+        Self { value }
     }
 }
 

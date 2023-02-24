@@ -1,1 +1,68 @@
 
+\section{Metal and C++14}
+
+overloading rules can include the address space attribute of an argument.
+
+
+
+\section{Compiler and Preprocessor}
+
+\subsection{Preprocessor Compiler Options}
+definition?
+
+-I dir, to add directory to search path for header files. 
+
+
+\subsection{Preprocessor Definitions}
+
+__METAL_VERSION__
+__METAL_MACOS__
+__METAL_IOS__
+__METAL__
+
+versions are MajorMinorPatch
+
+eg.
+#if __METAL_VERSION__ >= 200
+#endif
+
+\subsection{Math Intrinsics Compiler Options}
+
+--fast-math (default)
+--fno-fast-math
+
+
+\subsection{8. Compiler Options Controlling the Language Version}
+-std=
+
+Metal 3.0 is a unified language between platforms (before ios and macos languages different).
+
+\subsection{10. Target Conditionals}
+TARGET_OS_MAC
+TARGET_OS_OSX
+TARGET_OS_IPHONE
+TARGET_OS_IOS
+TARGET_OS_TV
+TARGET_OS_MACCATALYST
+TARGET_OS_SIMULATOR
+
+\subsection{11. Dynamic Library Linker Options}
+
+-dynamicLib
+-install_name
+
+\subsection{12. Options for Compiling to GPU binaries}
+
+-arch  [architecture]
+-gpu-family [gpu family name]
+-N [descriptor.mtlp-json]
+
+\subsection{Options for Generating Metal Library Symbol Files}
+
+-frecord-sources
+-frecord-sources=flat
+
+
+\section{6. Metal Coordinate Systems}
+
+

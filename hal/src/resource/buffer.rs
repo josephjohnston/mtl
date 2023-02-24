@@ -1,9 +1,14 @@
 use super::*;
 use core::marker::PhantomData;
 
-fn get_cpu_resource_options() -> mtl::ResourceOptions {
+fn get_cpu_resource_options(readable: bool) -> mtl::ResourceOptions {
+    let cache_mode = if readable {
+        mtl::CPUCacheMode::DefaultCache
+    } else {
+        mtl::CPUCacheMode::WriteCombined
+    };
     mtl::ResourceOptions::new(
-        mtl::CPUCacheMode::DefaultCache,
+        cache_mode,
         mtl::StorageMode::Shared,
         mtl::HazardTrackingMode::Untracked,
     )
@@ -34,24 +39,24 @@ impl<'a, T, E: Env> Buffer<'a, T, E> {
         &*self.id
     }
     // can we cast differently when on the gpu? i guess, but what's the use there if we can't use it as a slice?
-    pub fn cast<U>(self, len: usize) -> Buffer<'a, U, E> {
-        assert!(len * std::mem::size_of::<U>() <= self.initial_length);
-        let ptr: *mut U = self.slice.as_mut_ptr().cast();
-        let slice = unsafe { std::slice::from_raw_parts_mut::<U>(ptr, len) };
-        Buffer {
-            id: self.id,
-            name: self.name,
-            slice,
-            initial_length: self.initial_length,
-            env: PhantomData,
-        }
-    }
+    // pub fn cast<U>(self, len: usize) -> Buffer<'a, U, E> {
+    //     assert!(len * std::mem::size_of::<U>() <= self.initial_length);
+    //     let ptr: *mut U = self.slice.as_mut_ptr().cast();
+    //     let slice = unsafe { std::slice::from_raw_parts_mut::<U>(ptr, len) };
+    //     Buffer {
+    //         id: self.id,
+    //         name: self.name,
+    //         slice,
+    //         initial_length: self.initial_length,
+    //         env: PhantomData,
+    //     }
+    // }
 }
 impl<'a, T> Buffer<'a, T, Shared> {
-    pub(crate) fn new(device: &mtl::Device, name: String, len: usize) -> Self {
+    pub(crate) fn new(device: &mtl::Device, name: String, len: usize, readable: bool) -> Self {
         let length = len * std::mem::size_of::<T>();
         // let (id, ptr) = autoreleasepool(|_| {
-        let id = device.new_buffer_with_length(length, get_cpu_resource_options());
+        let id = device.new_buffer_with_length(length, get_cpu_resource_options(readable));
         id.set_label(&NSString::from_str(name.as_str()));
         let ptr = id.contents().cast();
         // (id, id.contents().cast())
@@ -71,23 +76,54 @@ impl<'a, T> Buffer<'a, T, Shared> {
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         self.slice
     }
+    pub fn cast<U>(self, len: usize) -> Buffer<'a, U, Shared> {
+        assert!(len * std::mem::size_of::<U>() <= self.initial_length);
+        let ptr: *mut U = self.slice.as_mut_ptr().cast();
+        let slice = unsafe { std::slice::from_raw_parts_mut::<U>(ptr, len) };
+        Buffer {
+            id: self.id,
+            name: self.name,
+            slice,
+            initial_length: self.initial_length,
+            env: PhantomData,
+        }
+    }
 }
 impl<'a, T> Buffer<'a, T, Private> {
-    pub(crate) fn new(heap: &mtl::Heap, name: String, len: usize) -> Self {
-        let length = len;
-        let id = heap
-            .new_buffer_with_length(length, get_gpu_resource_options())
-            .unwrap();
+    pub(crate) fn new(id: Id<mtl::Buffer>, name: String, len: usize) -> Self {
+        // let length = len;
+        // let id = heap
+        //     .new_buffer_with_length(length, get_gpu_resource_options())
+        //     .unwrap();
         id.set_label(&NSString::from_str(name.as_str()));
-        let slice = unsafe { std::slice::from_raw_parts_mut::<T>(std::ptr::null_mut(), length) };
+        let slice = unsafe { std::slice::from_raw_parts_mut::<T>(std::ptr::null_mut(), 0) };
         Self {
             id,
             name,
             slice,
-            initial_length: length,
+            initial_length: len,
             env: PhantomData,
         }
     }
+    pub fn discard(&self) {
+        // or use drop?
+        self.id.make_aliasable();
+    }
+    // pub(crate) fn new(heap: &mtl::Heap, name: String, len: usize) -> Self {
+    //     let length = len;
+    //     let id = heap
+    //         .new_buffer_with_length(length, get_gpu_resource_options())
+    //         .unwrap();
+    //     id.set_label(&NSString::from_str(name.as_str()));
+    //     let slice = unsafe { std::slice::from_raw_parts_mut::<T>(std::ptr::null_mut(), length) };
+    //     Self {
+    //         id,
+    //         name,
+    //         slice,
+    //         initial_length: length,
+    //         env: PhantomData,
+    //     }
+    // }
 }
 
 // pub trait Buffer {

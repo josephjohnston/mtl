@@ -56,9 +56,11 @@ impl Texture {
             array,
         }
     }
-    pub fn read(&self) {
-        
+    pub fn discard(&self) {
+        // or using drop?
+        self.id.make_aliasable();
     }
+    pub fn read(&self) {}
     // pub fn derive_new_texture(&self, label: &'a str, new_format: PixelFormat) -> Self {
     //     let new_texture_inner = self
     //         .inner

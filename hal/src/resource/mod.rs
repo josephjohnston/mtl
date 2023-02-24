@@ -47,14 +47,6 @@ use super::*;
 // #[cfg(target_os = "ios")]
 // #[cfg(target_os = "macos")]
 
-pub(crate) fn get_gpu_resource_options() -> mtl::ResourceOptions {
-    mtl::ResourceOptions::new(
-        mtl::CPUCacheMode::DefaultCache,
-        mtl::StorageMode::Private,
-        mtl::HazardTrackingMode::Untracked,
-    )
-}
-
 pub(crate) trait Wrapper<T> {
     fn get_mtl(&self) -> &T;
 }

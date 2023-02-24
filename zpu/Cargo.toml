@@ -8,6 +8,8 @@ build = "build.rs"
 
 [dependencies]
 hal = { path = "../hal" }
+rand = "0.8.5"
+num-modular = "0.5.1"
 
 [lib]
-# crate-type = ["staticlib"]
+crate-type = ["staticlib"]

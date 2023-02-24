@@ -65,14 +65,27 @@ impl GPU {
     //         })
     //         .collect()
     // }
-    pub fn new(gpu_info: GPUInfo, name: String) -> Self {
+    pub fn new_timestamp_sampler(&self, sample_count: usize, private: bool) -> TimestampSampler {
+        TimestampSampler::new(&self.id, sample_count, private)
+    }
+    pub fn resource_usage(&self) {
+        println!(
+            "{}, {}, {}",
+            self.id.current_allocated_size(),
+            self.id.recommended_max_working_set_size(),
+            self.id.has_unified_memory()
+        );
+    }
+    pub fn new(gpu_info: GPUInfo) -> Self {
         let id = gpu_info.id;
+        // heap descriptor
         let heap_desc = mtl::HeapDescriptor::new();
         heap_desc.set_resource_options(get_gpu_resource_options());
+        // archive descriptor
         let archive_desc = mtl::BinaryArchiveDescriptor::new();
+        // multi batch descriptor
         let multi_batch_desc = mtl::IndirectCommandBufferDescriptor::new();
-        let x = id.read_write_texture_support();
-        println!("{:?}", x);
+
         Self {
             id,
             heap_desc,
@@ -89,25 +102,25 @@ impl GPU {
     pub fn new_self_heap(&self, name: String, length: usize) -> SelfHeap {
         SelfHeap::new(&self.id, &self.heap_desc, name, length)
     }
-    pub fn new_buffer<T>(&self, name: String, len: usize) -> Buffer<T, Shared> {
-        Buffer::<T, Shared>::new(&self.id, name, len)
+    pub fn new_buffer<T>(&self, name: String, len: usize, readable: bool) -> Buffer<T, Shared> {
+        Buffer::<T, Shared>::new(&self.id, name, len, readable)
     }
     pub fn new_archive(
         &self,
         name: String,
         serialize: bool,
-        shaders_url_string: String,
+        shaders_url_str: &str, //String,
     ) -> Archive {
         Archive::new(
             &self.id,
             &self.archive_desc,
             name,
+            shaders_url_str,
             serialize,
-            shaders_url_string,
         )
     }
-    pub fn load_archive(&self, name: String) -> Archive {
-        Archive::load(&self.id, &self.archive_desc, name)
+    pub fn load_archive(&self, name: String, shaders_url_str: &str) -> Archive {
+        Archive::load(&self.id, &self.archive_desc, name, shaders_url_str)
     }
     pub fn new_multi_batch(&self, max_command_count: usize) -> MultiBatch {
         MultiBatch::new(&self.id, &self.multi_batch_desc, max_command_count)
@@ -129,9 +142,8 @@ pub struct Queue {
 unsafe impl Send for Queue {}
 unsafe impl Sync for Queue {}
 impl Queue {
-    fn new(raw_device: &mtl::Device, name: String, max_command_buffers: usize) -> Self {
-        assert!(max_command_buffers <= 64);
-        let id = raw_device.new_command_queue_with_max_command_buffer_count(max_command_buffers);
+    fn new(device: &mtl::Device, name: String, command_buffer_count: usize) -> Self {
+        let id = device.new_command_queue_with_max_command_buffer_count(command_buffer_count);
         id.set_label(&NSString::from_str(&*name));
         let command_buffer_desc = mtl::CommandBufferDescriptor::new();
         Self {
@@ -143,7 +155,98 @@ impl Queue {
     pub fn new_batch(&self, optimize: bool) -> Batch {
         Batch::new(&self.id, &self.command_buffer_desc, optimize)
     }
-    pub fn get_ref(&self) -> &mtl::CommandBufferDescriptor {
+    pub(crate) fn get_ref(&self) -> &mtl::CommandBufferDescriptor {
         &*self.command_buffer_desc
+    }
+}
+
+pub struct TimestampSampler<'a> {
+    device: &'a mtl::Device,
+    sample_buffer: Id<mtl::CounterSampleBuffer>,
+    sample_count: usize,
+    next_start_index: usize,
+    cpu_start_time: mtl::Timestamp,
+    // cpu_end_time: mtl::Timestamp,
+    gpu_start_time: mtl::Timestamp,
+    // gpu_end_time: mtl::Timestamp,
+}
+impl<'a> TimestampSampler<'a> {
+    pub(crate) fn new(device: &'a mtl::Device, sample_count: usize, private: bool) -> Self {
+        assert!(device.supports_counter_sampling(mtl::CounterSamplingPoint::StageBoundary));
+        let counter_set = device
+            .counter_sets()
+            .into_iter()
+            .find(|counter_set| counter_set.name().to_string() == "timestamp")
+            .unwrap();
+        // fn get_counter_set() -> Option<Id<mtl::CounterSet>> {
+        //     for counter_set in device.counter_sets() {
+        //         if counter_set.name().to_string() == "timestamp" {
+        //             return Some(counter_set);
+        //         }
+        //     }
+        //     None
+        // }
+        // let counter_set = get_counter_set(&*self.id).unwrap();
+        let desc = mtl::CounterSampleBufferDescriptor::new();
+        desc.set_label(&NSString::from_str("timestamp counter"));
+        desc.set_counter_set(&*counter_set);
+        desc.set_sample_count(2 * sample_count);
+        desc.set_storage_mode(match private {
+            false => mtl::StorageMode::Shared,
+            true => mtl::StorageMode::Private,
+        });
+        let sample_buffer = device
+            .new_counter_sample_buffer_with_descriptor(&desc)
+            .unwrap();
+        let cpu_start_time = mtl::Timestamp::new(0);
+        let gpu_start_time = mtl::Timestamp::new(0);
+        device.sample_timestamps(&cpu_start_time, &gpu_start_time);
+        Self {
+            device,
+            sample_buffer,
+            sample_count,
+            next_start_index: 0,
+            cpu_start_time,
+            gpu_start_time,
+        }
+    }
+    pub(crate) fn get_ref(&self) -> &mtl::CounterSampleBuffer {
+        &*self.sample_buffer
+    }
+    pub(crate) fn get_next_start_index(&mut self) -> usize {
+        assert!(self.next_start_index + 1 < 2 * self.sample_count);
+        let next_start_index = self.next_start_index;
+        self.next_start_index += 2;
+        next_start_index
+    }
+    pub fn get_timestamps(&self) {
+        let cpu_end_time = mtl::Timestamp::new(0);
+        let gpu_end_time = mtl::Timestamp::new(0);
+        self.device
+            .sample_timestamps(&self.cpu_start_time, &self.gpu_start_time);
+        let cpu_time_span = cpu_end_time.value - self.cpu_start_time.value;
+        let gpu_time_span = gpu_end_time.value - self.gpu_start_time.value;
+        let gpu_to_cpu_scaling = cpu_time_span / gpu_time_span;
+
+        let data = self
+            .sample_buffer
+            .resolve_counter_range(0..2 * self.sample_count);
+        let timestamps: Vec<usize> = data
+            .bytes()
+            .chunks(8)
+            .map(|limbs| {
+                let mut gpu_time = 0;
+                for i in 0..limbs.len() {
+                    gpu_time += limbs[i] as usize * ((1 << 8) as usize).pow(i as u32);
+                }
+                let nanoseconds = self.cpu_start_time.value + gpu_time * gpu_to_cpu_scaling;
+                let microseconds = nanoseconds / (10 as usize).pow(3);
+                // milliseconds
+                microseconds
+                // nanoseconds
+            })
+            .collect();
+        let timespans: Vec<usize> = timestamps.chunks(2).map(|pair| pair[1] - pair[0]).collect();
+        println!("{timespans:?}");
     }
 }

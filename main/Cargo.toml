@@ -2,14 +2,14 @@
 name = "main"
 version = "0.1.0"
 edition = "2021"
-# build = "build.rs"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# hal = { path = "../hal" }
-# zpu = { path = "../zpu" }
-# zpu = "0.1.0"
-primal = "0.3.2"
+zpu = {path = "../zpu" }
+# hal = {path = "../hal" }
+# primal = "0.3.2"
 rand = "0.8.5"
-# half = "2.2.1"
+# textplots = "0.6"
+num-modular = "0.5.1"

@@ -20,7 +20,6 @@ pub struct Batch {
     id: Id<mtl::CommandBuffer>,
     blit_pass_desc: Id<mtl::BlitPassDescriptor>,
     compute_pass_desc: Id<mtl::ComputePassDescriptor>,
-    // attachments: Id<
 }
 
 impl Batch {
@@ -31,32 +30,49 @@ impl Batch {
     ) -> Self {
         if optimize {
             desc.set_retained_references(false);
+        } else {
+            desc.set_retained_references(true);
         }
         desc.set_error_options(match optimize {
-            false => mtl::CommandBufferErrorOption::EncoderExecutionStatus,
             true => mtl::CommandBufferErrorOption::None,
+            false => mtl::CommandBufferErrorOption::EncoderExecutionStatus,
         });
         let id = queue.command_buffer_with_descriptor(&desc);
         // let block = block::ConcreteBlock::new(move |_: &mtl::CommandBuffer| {}).copy();
         // id.add_scheduled_handler(&block);
         // id.add_completed_handler();
+        // blit pass descriptor
         let blit_pass_desc = mtl::BlitPassDescriptor::blit_pass_descriptor();
+        // compute pass descriptor
         let compute_pass_desc = mtl::ComputePassDescriptor::compute_pass_descriptor();
-        // compute_pass_desc.set_dispatch_type(mtl::DispatchType::Concurrent);
-        let attachments = compute_pass_desc.sample_buffer_attachments();
-        let attachment_desc = attachments.object_at_indexed_subscript(0);
+        compute_pass_desc.set_dispatch_type(mtl::DispatchType::Concurrent);
 
         Self {
             id,
             blit_pass_desc,
             compute_pass_desc,
-            // attachments,
         }
     }
-    pub fn new_blit_pass(&self) -> BlitPass {
+    pub fn new_blit_pass(&self, timestamp_sampler: Option<&mut TimestampSampler>) -> BlitPass {
         BlitPass::new(&self.id, &self.blit_pass_desc)
     }
-    pub fn new_compute_pass(&self) -> ComputeEncoder {
+    pub fn new_compute_pass(
+        &self,
+        timestamp_sampler: Option<&mut TimestampSampler>,
+    ) -> ComputeEncoder {
+        match timestamp_sampler {
+            Some(timestamp_sampler) => {
+                let compute_pass_attachments = self.compute_pass_desc.sample_buffer_attachments();
+                let attachment = compute_pass_attachments.object_at_indexed_subscript(0);
+                attachment.set_sample_buffer(timestamp_sampler.get_ref());
+                let start_index = timestamp_sampler.get_next_start_index();
+                let end_index = start_index + 1;
+                attachment.set_start_of_encoder_sample_index(start_index);
+                attachment.set_end_of_encoder_sample_index(end_index);
+            }
+            _ => (),
+        };
+
         ComputeEncoder::new(&self.id, &self.compute_pass_desc)
     }
     pub fn status(&self) -> BatchStatus {
@@ -84,10 +100,9 @@ impl Batch {
     pub fn encode_signal_event(&self, event: &Event, value: u64) {
         self.id.encode_signal_event(event, value);
     }
+    // add_scheduled_handler
+    // add_completion_handler
 }
-
-// indirect
-// can
 
 pub struct MultiBatch {
     id: Id<mtl::IndirectCommandBuffer>,
@@ -103,10 +118,17 @@ impl MultiBatch {
     ) -> Self {
         let command_types = mtl::IndirectCommandType::ConcurrentDispatch; // i don't think we want DispatchThreads, for now
         desc.set_command_types(command_types);
+        // inherit pipeline
         let inherit_pipeline = false;
-        desc.set_inherit_pipeline_state(Bool::from(inherit_pipeline));
+        if inherit_pipeline {
+            desc.set_inherit_pipeline_state(Bool::from(inherit_pipeline));
+        }
+        // inherit buffers
         let inherit_buffers = false;
         desc.set_inherit_buffers(Bool::from(inherit_buffers));
+        if inherit_buffers {
+            // max command count ignored
+        }
 
         let id = device.new_indirect_command_buffer(
             &desc,
@@ -124,6 +146,7 @@ impl MultiBatch {
             max_command_count,
         }
     }
+    // pub fn reset_range(&self, )
     pub fn configure_command(&self, index: usize) {
         assert!(index < self.max_command_count);
         let command = self.id.indirect_compute_command_at_index(index);
@@ -131,6 +154,12 @@ impl MultiBatch {
         // command.
     }
 }
+
+// Execution Range
+
+// if you want to pass anything other than a buffer, must put those resources in an argument buffer
+
+// important is that textures only reside in device mem, we want to do lots in threadgroup mem, so maybe only use buffers.
 
 pub struct IndirectComputeCommand {
     id: Id<mtl::IndirectComputeCommand>,

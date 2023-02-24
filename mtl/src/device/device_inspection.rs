@@ -150,10 +150,10 @@ impl Device {
     pub fn current_allocated_size(&self) -> usize {
         unsafe { msg_send![self, currentAllocatedSize] }
     }
-    // [P] recommendedMaxWorkingGroupSize
+    // [P] recommendedMaxWorkingSetSize
     // iOS unavailable
-    pub fn recommended_max_working_group_size(&self) -> u64 {
-        unsafe { msg_send![self, recommendedMaxWorkingGroupSize] }
+    pub fn recommended_max_working_set_size(&self) -> u64 {
+        unsafe { msg_send![self, recommendedMaxWorkingSetSize] }
     }
     // [P] hasUnifiedMemory
     pub fn has_unified_memory(&self) -> bool {
@@ -164,6 +164,10 @@ impl Device {
     pub fn max_transfer_rate(&self) -> u64 {
         unsafe { msg_send![self, maxTransferRate] }
     }
+}
+
+/// # Sampling a GPU Device's Counters
+impl Device {
     // [P] counterSets
     pub fn counter_sets(&self) -> Vec<Id<CounterSet>> {
         unsafe { NSArray::into_vec(msg_send_id![self, counterSets]) }
@@ -208,6 +212,3 @@ impl Device {
         }
     }
 }
-
-// [T] MTLTimestamp
-type Timestamp = u64;

@@ -8,6 +8,7 @@
 #ifndef Bridge_h
 #define Bridge_h
 
-int rust_addition(int a, int b);
+int rust_addition();
+//void go();
 
 #endif /* Bridge_h */

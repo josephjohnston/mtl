@@ -1,0 +1,115 @@
+
+We optimize first for speed, only later to consider binary size.
+Implications are all static linking.
+
+
+
+\section{Libraries and archives and functions}
+
+
+Good idea to use symbol files
+https://developer.apple.com/documentation/metal/shader_libraries/generating_and_loading_a_metal_library_symbol_file?language=objc
+
+
+Library:
+A library is a collection of one or more shaders.
+Identify the library with a label and device.
+Build libraries from AIR or source code.
+Can have type executable or dynamic. If dynamic, it has property installName, a path to locate it. 
+See all public (kernel) functions in the library with functionNames
+To use a shader, make a function by calling newFunctionWithName: or newFunctionWithDescriptor:
+
+Creating libraries:
+can use Device's newDefaultLibrary takes all metal files and compiles to one library.
+can use Device's newLibraryWithURL:error: that takes the shaders in a file at the URL and creates a library.
+    Says to point to a metal library file (.metallib)
+    Says pass a Metal AIR file.
+can use Device's newLibraryWithSource:options:error: to create a library from a source string.
+We will use the second.
+There are also methods to create dynamic libraries. We don't use them. 
+We can and will also create a binary archive with Device's newBinaryArchiveWithDescriptor:error:
+
+Binary Archive Descriptor:
+Only has the URL property, to leave blank if creating a new archive, or to fill if loading an existing archive.
+
+Binary Archive:
+A container for pipeline state descriptors and associated compiled shader code.
+Identify via label and device.
+We add pipeline descriptors to the archive, which will become pipeline state objects with their code, using addComputePipelineFunctionsWithDescriptor:error:
+Can also add individual functions, using addFunctionWithDescriptor:library:error:
+We can serialize the archive to disk, with serializeToURL:error:
+
+Function:
+Functions are references to public shaders in libraries.
+'Specialized' if shader contains function constants.
+Release them immediately after creating pipeline objects.
+Identify with device and label, and name (readonly), and options (readonly: None or CompileToBinary), and functionType (readonly: Kernel or Visible).
+Input attributes had by stageInputAttributes.
+If specialized, use functionConstantsDictionary and set using a MTLFunctionConstantValues object.
+
+Function Handle:
+A handle to a function that can be added to a visible function table.
+
+Visible Function Table:
+A table of visible functions that can be passed into compute commands to customize shaders. 
+setFunction:atIndex, setFunctions:withRange:
+
+Visible Function Table Descriptor:
+Can create a default with visibleFunctionTableDescriptor, and modify functionCount
+
+Compute Pipeline Reflection:
+
+
+
+\section{Pipelines}
+
+\subsection{Compute Pipeline State}
+Lightweight object referring to compiled program.
+Creating them is expensive.
+Fully threadsafe, multiple encoders across threads and use it. 
+
+Identifying Properties:
+device
+gpuResourceID
+label
+
+Querying Threadgroup Attributes:
+maxTotalThreadsPerThreadgroup
+threadExecutionWidth
+staticThreadgroupMemoryLength
+
+Others:
+imageblockMemoryLengthForDimensions
+supportIndirectCommandBuffers (readonly)
+functionHandleWithFunction:
+newComputePipelineStateWithAdditionalBinaryFunctions:error:
+newVisibleFunctionTableWithDescriptor:
+
+
+\section{Our Scheme}
+
+On an initialization run, we create archives, with gpu.new_archive, passing in a name and the folder holding all the shaders.
+This creates a new binary archive, populates it with pipelines, and serializes it under the subfolder 'archives'.
+To create a new archive:
+    We do so from device, set the label on it (the original name passed in).
+    Then we use the name and the shader folder to retrieve a library by that name, setting the label on that too.
+    We also create function, io, and pipeline descriptors, setting intial properties on the pipeline descriptor.
+To populate with pipelines:
+    We iterate through all function names of the (newly constucted) instance's library.
+    For each we call the simplest library method newFunctionWithName:, because for now we're not doing anything dynamic, or even using constants.
+    Then we set that function for the pipeline descriptor, not setting anything else cuz we either already set it when creating the descriptor, or we're not yet using the features.
+    Then we add the pipeline descriptor to the archive.
+Note what's happening in this initialization is we're taking the library file, combined with some pipeline params, and compiling a pipline which is time consuming, yet we're doing on the client because it's GPU specific.
+
+On any run after initialization, we load an existing archive, again passing in the name and the shader folder.
+We now go through the same archive creation process as before, but setting the archive url appropriately.
+We do not subsequently populate with pipelines or serialize it.
+After loading the archive, we can load any pipeline from the archive.
+To do so, we re-create the function object same as before, set it on the pipeline descriptor, then finally create the pipeline (with fail-on-binary-archive-miss). The pipeline was created previously internally when we added the descriptor to archives. Now we're creating it explicitly, but it will use the one from the archives instead.
+
+Note we've paired archives with libraries, and pipelines in the archive with functions in the library.
+One could have more generally populated an archive with pipelines from functions from different libraries. 
+
+What else do we not take advantage of?
+linked functions. maybe private functions is an option, but we would need to change our api, and i'm not sure how to specify in shaders that we rely on other functions. not using function pointers or visible function tables or dynamic libraries, all of which we leave for performance. 
+we are also not doing offline compilation cuz it doesn't seem to work, and we don't mind an initial compilation phase. 

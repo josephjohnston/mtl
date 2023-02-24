@@ -1,8 +1,13 @@
 
-device, constant, threadgroup, thread
+
+address space attributes specifies where buffer objects go
+
+address spaces are disjoint
+
+device, constant, thread, threadgroup, threadgroup_imageblock, (ray_data, object_data : no attributes)
 
 all pointer/ref args for kernel func must have an address space attribute
-must be in device, threadgroup, constant.
+must be in device, threadgroup, threadgroup_imageblock, constant.
 
 \section{Device Address Space}
 
@@ -13,9 +18,10 @@ buffer mem object declared as ptr/ref to scalar, vec, or user-defined struct. AP
 textures are allways allocated from device address space, so device attribute not needed for texture types.
 must use functions to read and write from a texture object.
 
-\section{Constnat Address Space}
+\section{Constant Address Space}
 
 same as device space, but readonly.
+that is, for buffer objects at device mem pool. 
 
 address space for var at program scope must be constant. must be initialized when declared.
 those in program space persist between calls to any functions in the program.
@@ -25,7 +31,8 @@ buffers in constants space have 'minimum alignment requirements' see feature tab
 \section{Thread Address Space}
 
 variables declared in a function are allocated here.
-not sure when you have to use the thread attribute. 
+not sure when you have to use the thread attribute.
+i think only necessary for non-pointer/ref vars as the other are implicitly in thread address space. 
 
 \section{Threadgroup Address Space}
 
@@ -39,3 +46,8 @@ threads in a threadgroup can be divided into SIMD groups
 the mapping to SIMD-groups is `invariant`
 SIMD-groups in a threadgroup all the same size, except highest index which may be smaller.
 Quad group is SIMD-group with width 4.
+
+\subsection{threadgroup_imageblock Address Space}
+
+objects in threadgroup memory only accessible using an imageblock<T,L> object.
+allocated for each threadgroup executing the kernel

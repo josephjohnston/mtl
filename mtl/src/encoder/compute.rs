@@ -107,11 +107,15 @@ impl ComputeCommandEncoder {
         }
     }
     // [M] dispatchThreadgroups:threadsPerThreadgroup:
-    pub fn dispatch_threadgroups(&self, threads_per_grid: Size, threads_per_threadgroup: Size) {
+    pub fn dispatch_threadgroups(
+        &self,
+        threadgroups_per_grid: Size,
+        threads_per_threadgroup: Size,
+    ) {
         unsafe {
             msg_send![
                 self,
-                dispatchThreadgroups: threads_per_grid,
+                dispatchThreadgroups: threadgroups_per_grid,
                 threadsPerThreadgroup: threads_per_threadgroup
             ]
         }
@@ -170,9 +174,25 @@ impl ComputeCommandEncoder {
     pub fn memory_barrier_with_scope(&self, scope: BarrierScope) {
         unsafe { msg_send![self, memoryBarrierWithScope: scope] }
     }
-    // [M] setImageBlockWidth:height:
-    pub fn set_image_block_size(&self, width: usize, height: usize) {
+    // [M] setImageblockWidth:height:
+    pub fn set_imageblock_size(&self, width: usize, height: usize) {
         unsafe { msg_send![self, setImageblockWidth: width, height: height] }
+    }
+    // [M] sampleCountersInBuffer:atSampleIndex:withBarrier:
+    pub fn sample_counters_in_buffer(
+        &self,
+        sample_buffer: &CounterSampleBuffer,
+        sample_index: usize,
+        barrier: bool,
+    ) {
+        unsafe {
+            msg_send![
+                self,
+                sampleCountersInBuffer: sample_buffer,
+                atSampleIndex: sample_index,
+                withBarrier: Bool::from(barrier)
+            ]
+        }
     }
 }
 

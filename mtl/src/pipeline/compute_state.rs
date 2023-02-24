@@ -55,4 +55,8 @@ impl ComputePipelineState {
             Id::new(raw_table).expect(ID_NEW_FAILURE)
         }
     }
+    // [M] imageblockMemoryLengthForDimensions:
+    pub fn imageblock_memory_length_for_dimensions(&self, size: Size) -> usize {
+        unsafe { msg_send![self, imageblockMemoryLengthForDimensions: size] }
+    }
 }

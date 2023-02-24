@@ -30,13 +30,18 @@ pub struct ComputeEncoder {
 }
 impl ComputeEncoder {
     pub fn new(cmd_buffer: &mtl::CommandBuffer, desc: &mtl::ComputePassDescriptor) -> Self {
+        // desc sample buffer attachments
         let id = cmd_buffer.compute_command_encoder_with_descriptor(&desc);
         Self { id }
     }
     pub fn set_pipeline(&self, pipeline: &Pipeline) {
-        self.id.set_image_block_size(16, 1);
-        self.id.set_image_block_size(32, 16);
         self.id.set_compute_pipeline_state(pipeline.get_mtl())
+    }
+    pub fn set_imageblock_size(&self, width: usize, height: usize) {
+        self.id.set_imageblock_size(width, height);
+    }
+    pub fn set_threadgroup_memory_length(&self, length: usize, index: usize) {
+        self.id.set_threadgroup_memory_length(length, index);
     }
     pub fn set_bytes(&self, index: usize, bytes: *const std::ffi::c_void, length: usize) {
         self.id.set_bytes(bytes, length, index);
@@ -52,6 +57,15 @@ impl ComputeEncoder {
     }
     pub fn barrier(&self, scope: BarrierScope) {
         self.id.memory_barrier_with_scope(scope);
+    }
+    pub fn set_counter(
+        &self,
+        sample_buffer: &mtl::CounterSampleBuffer,
+        index: usize,
+        barrier: bool,
+    ) {
+        self.id
+            .sample_counters_in_buffer(sample_buffer, index, barrier);
     }
     pub fn end_encoding(&self) {
         self.id.end_encoding();

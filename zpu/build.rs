@@ -1,9 +1,9 @@
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-changed=shaders/shader.metal");
+    println!("cargo:rerun-if-changed=shaders");
     // println!("cargo:rustc-link-search=all=target/debug/");
-    compile_ios();
+    // compile_ios();
     compile_macos();
     // compile_air();
     // compile_lib();
@@ -36,8 +36,8 @@ fn compile_macos() {
         .args(["-sdk", "macosx"])
         .arg("metal")
         .arg("-std=metal3.0")
-        .arg("shaders/shader.metal")
-        .args(["-o", "shaders/shader_macos.metallib"])
+        .arg("src/shaders/test.metal")
+        .args(["-o", "src/shaders/test.metallib"])
         .output()
         .unwrap();
     if !output.status.success() {

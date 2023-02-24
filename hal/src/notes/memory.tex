@@ -1,0 +1,85 @@
+
+
+
+so what's occupancy?
+
+
+
+what's the tradeoff between FFT and sumcheck?
+both are log depth.
+FFT needs output as large as input. sumcheck doesn't.
+in both cases you finish a layer, and go to the next layer by 
+
+for sumcheck we need all blocks resident. 
+
+a strike in the middle is having all blocks compute an FFT, then they get all aggregated with addition. 
+
+maybe each block does it's own sumcheck. 
+this may lead to the many-layered approach. 
+
+if they could stay resident, there'd only be like 2^7 of them. so we'd only increase 
+
+or they get aggregated, but the sum is committed 
+
+suppose you start with many more blocks than resident. 
+each block computes a sum of terms.
+in total a certain number of terms get summed. those get reduced to constants. then we're left to evaluate a poly of the remaining size. 
+given a single random value though, we can already fold in half. note this is different than amortizing. in amortizing we keep
+
+suppose we don't want to recompute anything. 
+then we don't want to recompute any of the coefs of any rounds, including the first.
+then we need all coefs of each round present in memory. 
+each block when it retires lets go of memory, so any coefs it held must be output, rather than remaining and waiting for a challenge. they must be the first round.
+and indeed their output must be written to memory, not only aggregated, yet this will be smaller than the original. the reason to write to memory is to avoid recompute the c
+
+we'll reduce immediately, and use the same challenge across multiple, thus allowing to aggregate folds rather than just one. 
+
+maybe multi-folds isn't too costly with high modulus. we know the actual size doesn't grow much. but i forgot how extraction would work.
+
+what about FFT?
+how to do this? seems each one still needs to write it's output to memory.
+maybe start here. how to do an FFT?
+
+or we use atomic and gather the first set, then use another set for another, the same blocks. 
+we we need a hard N? 
+note broadcasting works great for threadgroups.
+
+
+2 questions.
+1. can we know how many blocks to have resident? just need the number. also, can we broadcast?
+2. what about lots of kernels with just 1 block. (note this isn't too much different from one kernel with highly parameterized blocks).
+
+the cost of folding is you can only fold once basically.
+you can't use the same challenges across folds. 
+to extract for that, if you keep the multiplier the same, you'll get a linear response diff. 
+S(c1-c2) + m(T(c1-c2)) = (c1-c2)(S+mT)
+so you can recover an opening to S+mT. suppose you could also recover for S+m'T. then you've got one for (m-m')T. can we get that? yeah we can, though it will have a different c1'-c2'.
+so we've got (c1-c2)(S+mT) and (c1'-c2')(S+m'T). we divide both to get weak openings to S+mT and S+m'T. this seems like the regular case again, these being two responses. (we may need to multiply S too). subtract to get (m-m')T. but now you're subtracting weak openings. this is fine if the denominators are the same, but c1-c2 != c1'-c2'. Can we get them the same?
+usually we let everything free except 1. now once finding c1,c2, with m, we need to find another with m'. usually we think of classes, one for each multiplying challenge. but now we need like recursive classes. a class for c1,c2 that leaves m free so it's heavy enough with m. 
+we'll need to review extraction.
+we'll probably use a mix of this recursive extraction to justify a few rounds, and also justify a few rounds with different denominators. 
+
+we definitely want to reused challenge across sumchecks. each challenge serves to reduce the same amount of data. it's pipelining. 
+
+
+
+
+but we really want them to be resident. we to aggregate their results and broadcast back a challenge. that is, we want them to write to global memory
+could try to self identify the first N blocks, and keep them there while any that come after immediately suspend. when a block starts it reads the counter, and if it's less than N it increments and executes, if N it suspends.
+how to broadcast? 
+
+suppose many kernels use the same resources. then why not launch a bunch of 1 block kernels?
+
+
+
+
+so how do they do FFTs on GPU?
+any guesses?
+no, not without resident blocks. 
+also worth looking at prefix sum. 
+
+
+FFT bit reversal.
+the elements get shuffled. you can do this at the beginning by reversing the bits. 
+if you reverse the bits of the input indices, then you're doing the shuffle to begin. 
+

@@ -21,6 +21,7 @@ impl Pipeline {
                 let execution_width = id.thread_execution_width();
                 let threadgroup_memory_length = id.static_threadgroup_memory_length();
                 let max_threads_per_threadgroup = id.max_total_threads_per_threadgroup();
+                // println!("{}", id.thread_execution_width());
                 Ok(Self {
                     id,
                     execution_width,
@@ -33,6 +34,10 @@ impl Pipeline {
     }
     pub(crate) fn get_mtl(&self) -> &mtl::ComputePipelineState {
         &*self.id
+    }
+    pub fn go(&self, width: usize, height: usize, depth: usize) -> usize {
+        let size = mtl::Size::new(width, height, depth);
+        self.id.imageblock_memory_length_for_dimensions(size)
     }
 }
 
