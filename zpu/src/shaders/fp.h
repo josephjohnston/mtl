@@ -71,8 +71,74 @@ uint add(uint a, uint b)
 
 uint sub(uint a, uint b)
 {
-    return uint((ulong(a) + P - ulong(b)) % P);
+    return uint((ulong(a) - ulong(b)) % P);
 }
+
+// template <class UType, ushort U>
+// UType mul_scalar(UType a, uint b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) * ulong(b)) % P);
+//     }
+//     return result;
+// }
+
+// template <class UType, ushort U>
+// UType mul_vector(UType a, UType b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) * ulong(b[u])) % P);
+//     }
+//     return result;
+// }
+
+// template <class UType, ushort U>
+// UType add_scalar(UType a, uint b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) + ulong(b)) % P);
+//     }
+//     return result;
+// }
+
+// template <class UType, ushort U>
+// UType add_vector(UType a, UType b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) + ulong(b[u])) % P);
+//     }
+//     return result;
+// }
+
+// template <class UType, ushort U>
+// UType sub_scalar(UType a, uint b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) + P - ulong(b)) % P);
+//     }
+//     return result;
+// }
+
+// template <class UType, ushort U>
+// UType sub_vector(UType a, UType b)
+// {
+//     UType result;
+//     for (ushort u = 0; u < U; u++)
+//     {
+//         result[u] = uint((ulong(a[u]) + P - ulong(b[u])) % P);
+//     }
+//     return result;
+// }
 
 class Fp
 {
@@ -86,7 +152,7 @@ private:
     uint val;
     static constexpr uint mul(uint a, uint b)
     {
-        return uint((ulong(a) * ulong(b)) % P);
+        return uint((ulong(a) * ulong(b)));
         // return (ulong(a) * ulong(b));
         // // 2^40 = -1,
         // // take upper 64-40=16 bits and subtract from lower 32.
@@ -98,13 +164,13 @@ private:
     }
     static constexpr uint add(uint a, uint b)
     {
-        return (ulong(a) + ulong(b)) % P;
+        return (ulong(a) + ulong(b));
         // return (ulong(a) + ulong(b));
         // return a + b;
     }
     static constexpr uint sub(uint a, uint b)
     {
-        return (ulong(a) - ulong(b) + P) % P;
+        return (ulong(a) - ulong(b) + P);
         // return (ulong(a) - ulong(b) + P);
         // return a - b;
     }
@@ -527,3 +593,7 @@ uint get_zeta(uint k, uint i)
         return 0;
     }
 }
+
+// uint seeds[] = {
+
+// };

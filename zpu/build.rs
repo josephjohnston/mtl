@@ -1,21 +1,25 @@
 use std::process::Command;
 
+#[path = "src/shaders/mod.rs"]
+mod shaders;
+
 fn main() {
-    println!("cargo:rerun-if-changed=shaders");
+    println!("cargo:rerun-if-changed=src/shaders");
     // println!("cargo:rustc-link-search=all=target/debug/");
     // compile_ios();
+    // shaders::gen();
     compile_macos();
     // compile_air();
     // compile_lib();
 }
 
-fn compile_ios() {
+fn compile_macos() {
     let output = Command::new("xcrun")
-        .args(["-sdk", "iphoneos"])
+        .args(["-sdk", "macosx"])
         .arg("metal")
         .arg("-std=metal3.0")
-        .arg("shaders/shader.metal")
-        .args(["-o", "shaders/shader_ios.metallib"])
+        .arg("src/shaders/rolled.metal")
+        .args(["-o", "src/shaders/rolled_macos.metallib"])
         .output()
         .unwrap();
     if !output.status.success() {
@@ -31,13 +35,13 @@ stderr: {}
     }
 }
 
-fn compile_macos() {
+fn compile_ios() {
     let output = Command::new("xcrun")
-        .args(["-sdk", "macosx"])
+        .args(["-sdk", "iphoneos"])
         .arg("metal")
         .arg("-std=metal3.0")
-        .arg("src/shaders/test.metal")
-        .args(["-o", "src/shaders/test.metallib"])
+        .arg("src/shaders/rolled.metal")
+        .args(["-o", "src/shaders/rolled_ios.metallib"])
         .output()
         .unwrap();
     if !output.status.success() {

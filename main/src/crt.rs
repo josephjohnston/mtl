@@ -364,8 +364,8 @@ const nums: [u32; 2048] = [
     44,
 ];
 
-// const ORD: u32 = 8;
-const S: u32 = 1 << 0;
+const ORD: u32 = 1;
+const S: u32 = 1 << 1;
 const T: u32 = 1 << 5;
 const U: u32 = 1 << 0;
 pub const D: u32 = S * T * U;
@@ -386,12 +386,10 @@ impl Ring {
         (T as f32).log2() as u32
     }
     pub fn logU() -> u32 {
-        0
-        // (U as f32).log2() as u32
+        (U as f32).log2() as u32
     }
     pub fn logOrd() -> u32 {
-        0
-        // (ORD as f32).log2() as u32
+        (ORD as f32).log2() as u32
     }
     pub fn init() -> Self {
         let mut r = Ring {
@@ -428,12 +426,19 @@ impl Ring {
                 }
             }
         }
-        // println!("\nRESULTS");
+        println!("\nRESULTS");
         // for t in 0..T {
         //     println!("thread {t}");
         //     for j in 0..S * U {
         //         println!("{j}: {}", arrays[(t * S * U + j) as usize]);
         //     }
+        // }
+        for i in 0..results.len() {
+            println!("{i}: {}", results[i]);
+        }
+        // println!("\nCOEFS");
+        // for i in 0..self.coefs.len() {
+        //     println!("{i}: {}", self.coefs[i]);
         // }
         arrays
     }
@@ -496,7 +501,7 @@ impl Ring {
     }
     pub fn decompose_across_threads(&mut self) {
         println!("\nDECOMPOSING");
-        for l in 0..(Self::logT() - Self::logU() - Self::logOrd()) {
+        for l in 0..(Self::logT() + Self::logU() - Self::logOrd()) {
             for t in 0..T / (1 << l + 1) {
                 for r in 0..(1 << l) {
                     let lo_index = (2 * r) * T / (1 << l + 1) + t;
@@ -541,6 +546,32 @@ impl Ring {
         //         }
         //     }
         // }
+    }
+    pub fn rearrange(&mut self) {
+        for l in (Self::logT() + Self::logU() - Self::logOrd())..(Self::logT() + Self::logU()) {
+            for t in 0..T / (1 << l + 1) {
+                for r in 0..(1 << l) {
+                    let lo_index = (2 * r) * T / (1 << l + 1) + t;
+                    let hi_index = (2 * r + 1) * T / (1 << l + 1) + t;
+                    // println!("threads: {lo_index}, {hi_index}");
+                    // let idx = Self::logT() - l - 1;
+                    // let mask = 1 << idx;
+                    // let sigma = tau ^ mask;
+                    for s in 0..S {
+                        // let i = s * (1 << l) + r;
+                        // let zeta = Self::get_zeta(Self::logS() + l + 2, 2 * i);
+                        for u in 0..U {
+                            let lo_coef = self.arrays[(lo_index * S * U + s * U + u) as usize];
+                            let hi_coef = self.arrays[(hi_index * S * U + s * U + u) as usize];
+                            // let mult = hi_coef.mulm(zeta, &P);
+                            self.arrays[(hi_index * S * U + s * U + u) as usize] = lo_coef; //.subm(mult, &P);
+                            self.arrays[(lo_index * S * U + s * U + u) as usize] = hi_coef;
+                            //.addm(mult, &P);
+                        }
+                    }
+                }
+            }
+        }
     }
     pub fn mul(&mut self, l: u32) {
         for t in 0..T {
@@ -753,10 +784,6 @@ impl Ring {
         // so what is sqrt{2}?
     }
     pub fn print(&self) {
-        // println!("\nCOEFS");
-        // for i in 0..self.coefs.len() {
-        //     println!("{i}: {}", self.coefs[i]);
-        // }
         println!("\nARRAYS");
         for t in 0..T {
             println!("thread {t}");

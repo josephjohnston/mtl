@@ -95,15 +95,15 @@ impl<'a> Archive<'a> {
         id.set_label(&label);
 
         // library
-        let bundle = Bundle::get_bundle().unwrap();
-        let library_url = bundle
-            .url_for_resource(
-                &NSString::from_str("test"),
-                &NSString::from_str("metallib"),
-                &NSString::from_str("shaders"),
-            )
-            .unwrap();
-        // let library_url = Self::get_library_url(shaders_url, name_str);
+        // let bundle = Bundle::get_bundle().unwrap();
+        // let library_url = bundle
+        //     .url_for_resource(
+        //         &NSString::from_str("rolled_ios"),
+        //         &NSString::from_str("metallib"),
+        //         &NSString::from_str("shaders"),
+        //     )
+        //     .unwrap();
+        let library_url = Self::get_library_url(shaders_url, name_str);
         let library = device.new_library_with_url(&library_url).unwrap();
         library.set_label(&label);
         // function descriptor

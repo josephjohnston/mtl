@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D34B5D7F2989C2D700152598 /* libzpu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D391DEC5296260E200AAC016 /* libzpu.a */; };
+		D3325B4129ABB92F00AAC854 /* libzpu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D3325B3E29ABB49B00AAC854 /* libzpu.a */; };
 		D390AAA929A907600006BD0D /* shaders in Resources */ = {isa = PBXBuildFile; fileRef = D390AAA829A907600006BD0D /* shaders */; };
 		D391DE952962465C00AAC016 /* sagaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D391DE942962465C00AAC016 /* sagaApp.swift */; };
 		D391DE972962465D00AAC016 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D391DE962962465D00AAC016 /* ContentView.swift */; };
@@ -36,6 +36,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D3325B3E29ABB49B00AAC854 /* libzpu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libzpu.a; path = "target/aarch64-apple-ios/release/libzpu.a"; sourceTree = "<group>"; };
 		D390AAA829A907600006BD0D /* shaders */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shaders; path = zpu/src/shaders; sourceTree = "<group>"; };
 		D391DE912962465C00AAC016 /* saga.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = saga.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D391DE942962465C00AAC016 /* sagaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sagaApp.swift; sourceTree = "<group>"; };
@@ -61,7 +62,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D34B5D7F2989C2D700152598 /* libzpu.a in Frameworks */,
+				D3325B4129ABB92F00AAC854 /* libzpu.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +148,7 @@
 		D391DEC4296260E100AAC016 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				D3325B3E29ABB49B00AAC854 /* libzpu.a */,
 				D3D61DBD29636349001E0F44 /* libzpu.a */,
 				D3D61DB92963615F001E0F44 /* libzpu.a */,
 				D391DEC5296260E200AAC016 /* libzpu.a */,
@@ -482,7 +484,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/target/aarch64-apple-ios/release";
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*][arch=arm64]" = "$(PROJECT_DIR)/target/aarch64-apple-ios/debug";
 				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=arm64]" = "/Users/josephjohnston/saga/target/aarch64-apple-darwin/debug";
 				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=x86_64]" = "$(PROJECT_DIR)/target/x86_64-apple-darwin/debug";
@@ -499,8 +501,8 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				buildvariant = release;
-				platform = macos;
-				"platform[arch=*]" = macos;
+				platform = ios;
+				"platform[arch=*]" = ios;
 			};
 			name = Debug;
 		};
@@ -532,7 +534,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/target/aarch64-apple-ios/release";
 				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=arm64]" = "$(PROJECT_DIR)/target/aarch64-apple-darwin/release";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
@@ -546,8 +548,8 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				buildvariant = release;
-				platform = macos;
-				"platform[arch=*]" = macos;
+				platform = ios;
+				"platform[arch=*]" = ios;
 			};
 			name = Release;
 		};

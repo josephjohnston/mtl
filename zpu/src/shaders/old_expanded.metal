@@ -412,3 +412,97 @@ void expanded2(
         output[g * (1 << 12) + s * ((1 << 12) / 4) + t] = vals[s];
     }
 }
+
+#include <metal_stdlib>
+#include "fp.h"
+using namespace metal;
+
+template <uint S>
+void Kappa(
+    uint D,
+    uint T,
+    uint U,
+    device uchar *input,
+    device uint *output,
+    uint g,
+    uint t)
+{
+    // uint D = S * T * U;
+    uint array[S];
+    // READING INPUT
+    for (ushort s = 0; s < S; s++)
+    {
+        array[s] = input[g * D + s * (D / S) + t];
+    }
+    // DECOMPOSING WITHIN THREADS
+    uint logS = ushort(log2(half(S)));
+    for (ushort k = 0; k < logS; k++)
+    {
+        for (ushort i = 0; i < (1 << k); i++)
+        {
+            for (uint s = 0; s < S / (1 << (k + 1)); s++)
+            {
+                uint hi_index = (2 * i + 1) * (S / (1 << (k + 1))) + s;
+                uint zeta = get_zeta(k + 2, i);
+                uint mult = mul(array[hi_index], zeta);
+                uint lo_index = (2 * i) * (S / (1 << (k + 1))) + s;
+                array[hi_index] = sub(array[lo_index], mult);
+                array[lo_index] = add(array[lo_index], mult);
+            }
+        }
+    }
+    // DECOMPOSING ACROSS THREADS
+    ushort logT = ushort(log2(half(T)));
+    for (ushort l = 0; l < logT; l++)
+    {
+        uint idx = logT - l - 1;
+        uint mask = 1 << idx;
+        uint tau = t;
+        uint sigma = tau ^ mask;
+        for (ushort s = 0; s < S; s++)
+        {
+            for (ushort u = 0; u < U; u++)
+            {
+                uint tau_coef = array[s * U + u];
+                // uint to_send = tau_coef;
+                uint r = t >> (logT - l);
+                uint i = s * (1 << l) + r;
+                uint zeta = 2;
+                // get_zeta(logS + l + 2, i);
+                //  get_zeta(l + 2, 2 * i);
+                if (sigma < tau)
+                {
+                    tau_coef = mul(tau_coef, zeta);
+                }
+                uint sigma_coef = simd_shuffle_xor(tau_coef, mask);
+                //  if (sigma < tau)
+                //  {
+                //      array[s * U + u] = sigma_coef - tau_coef;
+                //  }
+                //  else
+                //  {
+                //      array[s * U + u] = tau_coef + sigma_coef;
+                //  }
+                array[s * U + u] = sigma < tau ? sub(sigma_coef, tau_coef) : add(tau_coef, sigma_coef);
+            }
+        }
+    }
+    // MULTIPLYING
+    // WRITING
+    for (ushort s = 0; s < S; s++)
+    {
+        output[g * D + s * (D / S) + t] = array[s];
+    }
+}
+
+kernel void go(
+    device uchar *input,
+    device uint *output,
+    constant uint &D,
+    constant uint &T,
+    constant uint &U,
+    uint g [[threadgroup_position_in_grid]],
+    uint t [[thread_position_in_threadgroup]])
+{
+    Kappa<1 << 1>(D, T, U, input, output, g, t);
+}

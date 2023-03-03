@@ -584,387 +584,568 @@ SD = 8, TD = 7
     GD = 14: 364
     GD = 13: 177
 
-we're back, looking at the same shaders, and now getting half the performance.
-
 There the last two are no longer approximately the samee, but now the last about twice as slow.
 
-Maybe we're doing this wrong. 
-We want to perform with constant S and D.
-I've expanded and it performs the 
 
-Wow, just reading takes like 32/33, whereas with the arithmetic it takes like 27/28, how can that be?
-we can't try for the others without expanding. 
-well, it's easier to expand them. try for S = 2.
-So for S=2, there's little advantage, because without expansion it's already close to reading rate.
-the advantage grows with the amount of arithmetic. 
-but for now we're not going to expand for higher. 
-so we need to figure out why expanding it gives a benefit. shouldn't Metal expand it for us?
-maybe we can wait on this, to think about it more.
-I realized the reason is it only does the trivial calculations. this why there's loop unrolling. so indeed, we'll have to unwroll our own loops. 
-maybe it's simply that it wasn't doing those instructions in parallel but following the loop. so we only unroll the inner two loops.
 
-how do you reach bandwidth?
 
-what is our occupancy?
-that' active warps / 32
-but how do we know how many warps are active?
 
-oh, right, a core can execute multiple blocks at once. you want many active warps from multiple blocks in a core at once. 
 
-calculate the number of registers per warp.
-then divide that by the register file size, to get how many warps can be active at once. 
-then divide by number of possible active warps per block... do we know what that is?
-
-unroll more loops and you use more registers, decreasing occupancy. 
-
-simd_shuffle(data, lane_id)
-simd_shuffle_and_fill_X(data, filling_data, delta)
-simd_shuffle_and_fill_X(data, filling_data, delta, modulo)
-simd_shuffle_X(data, delta)
-    non-wrapping
-simd_shuffle_rotate_X(data, delta)
-    wrapping
-simd_shuffle_xor(value, mask)
-
-maybe we want to use quads, then after sharing these we have to share among the 8 sections. 
-
-at the moment we don't know how to make use of ballots and logicals.
-reductions also don't seem helpful
-the way we need to share is all pairs to share need to multiply by the same.
-we're just sharing vectors with each other. 
-i think we'll restrict to shuffles.
-
-maybe we can use the xor.
-we need a single mask. 
-we know what it would be: 1 << log(T)-l-1;
-note it goes in pairs, just as we need.
-but it only works in warps.
-which is fine when we're done to having T/2^l <= 32, l >= log(T)-5, eg log(T)=5.
-so suppose l+w >= log(T)
-would this work now? well bit log(T)-l-1 <= w-1 so yes, that bit is one the w bits. 
-so that's perfect for us.
-again, can we handle log(T)=5?
-S + T + U = 10, then we just need S + U = 5, and I think we can d that.
-so we should only need this shuffle operation.
-can also try quad xor. 
-
-how are we supposed to get the block from t and r?
-actually not from t but from 
-i guess s gives us the top bits of i, whereas r, the top bits of tau, give us the bottom bits of i.
-why do we need i? in order to get zeta.
-ok, we discard the lower l+2 
-how many bits? log(T). 
-highest bit? log(T)-1.
-I think highest bit to discard? log(T)-l-1
-remaining number of bits? l.
-t is log(T)-l-1 bits, b is 1 bit.
-r must then be log(T) - (log(T)-l-1) - 1 = l bits
-we discard the lower log(T)-l bits.
-
-i think our algo is basically right, still just powers of 2 and a single zeta.
-i feel like waiting to do zetas and primes cuz i want to know the performance without them.
-then i need to unroll. 
-
-
-a major challenge will be moving data in and out.
-
-
-
-we need to organize the coef order.
-i guess we want to correctly implement what the thread should hold. 
-we have the coefs, and we have the roots of unity, we can actually just look those up too.
-
-we stay focused.
-every moment we're aware and effective.
-right now we need to check the two algos against each other.
-we will compute our main result. then we will check against the correct result, by computing the correct result in monomial form, then transforming that form to the thread form.
-
-we're wrong on the upper half of each thread. but i'm not sure which is right.
-
-lets be clear how we're supposed to compute correctly.
-we can determine the ordered blocks, and reduce inside each one.
-then we need to take these blocks and transform to thread space.
-or, we could try to transform threadspace to blockspace.
-
-lets make sure we have the basic reduction correct.
-we start with a k. we need to decompose into 2^{k+1} parts.
-zeta is a primitive 2^{k+2}'th ROU. 
-we need to compute the binary tree.
-given an i, we'll retrieve the correct zeta
-
-we're getting the top two blocks wrong.
-yay, it was for the same problem of using i rather than 2i.
-but now why would it work for the first two blocks?
-note it was our algo that was wrong, not the correct one.
-why would it work?
-it worked for i=0 and i=1,
-oh, i see, the second block works because we use the same zeta for every pair of blocks.
-
-seems even to work with U.
-
-in order to reduce to beylong 2^8 blocks, we need non-power of 2 multipliers.
-so we need to examine these now.
-i'm hoping we can only need 1/8'th as much by multiplying with powers of 2.
-indeed, consider some k >= 3. 
-we want to split into 2^{k+1} parts.
-so we consider zeta a primitive 2^{k+2}'th ROU.
-and we'll build it up in binary form across i.
-so every tree coming out from one of the 8 top blocks has a set of children with a common parent, which has common exponents (1+i1*2)(1+i2*4)(1+i3*8)
-all sets have the same subtree exponents. only the parent exponents differ.
-but it's not like we can share them exactly, not multiplicatively. we could compute the subtree exponents, and then exponentiate recursively by (1+0*2) and (1+1*2). basically this will mean raising some to 2^1, 2^2, or 2^3.
-why can't we use multiplying by powers of 2 here? that would be multiplication and we need exponentiation.
-so either we do this exponentiation, not too bad, or we store them. how many mult? well first take the tree and square it's elements, multiply by itself. then you'll repeat but actually next time you'll need to exponentiate by 4, then next time 8 (i was hoping only repeated squaring)
-we'll probably be better to store them.
-either way, we need to compute at least one subtree. and the way we do it we compute from the bottom up, so we need to know to what level we want to decompose, to what k+1, then we find PROU for k+2, then we exponentiate it with subtree exponents up to (1+i_{k+1}*2^{k+1}) from (1+i4*2^4)
-
-
-let focus for now on structured other PROUs
-8'th ROU
-(w+w^7)^2 = w^2+w^14+2*w^8 = 2
-w^2(w^12+1)=w^2(w^4+1)=0
-this works for us too
-w is a PROU for 8
-2^10+2^70
-powers of 2 will grow large here. we need to figure out how to reduce
-
-
-how are we going to do this?
-we'll have a D size. then we have multiple in a block and multiple blocks.
-for now we can i guess try one per block, and make it large. 
-
-we want to read in multiple at once. how do we do that? we set the type to be in vectors of that size.
-
-
-
-
-wow, how to do codegen?
-we'll have functions to add.
-like add a for loop.
-
-what's the structure?
-
-what about unrolling? I guess we will do that ourselves in how we generate it.
-we can just make primitive insertions. could be just concatnation. 
-we'd want to chain these
-
-we need to keep track of variables.
-we have overlap in the primitive types
-we can implement some collection types, and have copy traits. 
-i'm not sure how they do it with 'rust gpu'.
-but where as the gen happen?
-suppose you've implemented types and you make the code. 
-we won't implement types.
-but even plain code seems hard.
-like declaring scope. 
-
-
-this isn't working anymore. why half the speed?
-really, the original in risc0 is still so slow. 
-both for reading and with arithmetic. 
-we're consistently getting one order of magnitude slower. 
-have no idea why. i guess we forget about, and just optimize amap. 
-
-risc0 seems to not use any loop unrolling or any templates
-
-omg, now it's performing as before... 
-even a little better.
-no idea what happened.
-
-i want to try reading in while we compute rather than reading all then computing all. 
-this means 
-we basically got what we wanted. 
-note we need to unroll all the loops if we're going to avoid any index aritmetic. best if we only keep u rolled since its addition. 
-
-now we're trying to do decomposition across threads on gpu.
-before we identified the relevant threads and calculated on them.
-here we gotta go the other way. we are thread centric. so given a thread id we need to know when to use it. 
-notice how the index and the first parts of the array id are the same across T/2^{l+1}, and only the arrays vary with t. i think there's a swap for every t. eg with l=0, every two threads swap.
-given an l value. we can consider the range of t. and also beta_{l+1}(i,b).
-we need every thread to self identify. 
-
-suppose we are only given a thread id tau in T. 
-
-U has nothing to do with decomp.
-so why can we decompose log(TU) times?
-i think the U should have no affect. and it seems it doesn't, but why?
-basically if we're going to decompose with u it needs to happen after cross thread communication within the thread again.
-but we won't do that since we'll have ord >= U
-what happens if you apply log(T) times? it has no effect.
-so 
-
-
-
-with TD=10, TS=4, TG=14,
-before with just independen threads we got 13.
-now we get more like 40 when doing the cross threads, obviously that 10 costs a lot. generates a ton of code, yet luckily metal can still handle it. 
-luckly we'll only have like 5 in practice. 
-we should calculate the total inner of each one.
-
-in order to start optimizing with real number system and zetas we should streamline the independent code generation.
-we should also start having multiple instances per block.
-but actually first, without optimization, we need the zetas to start working. I guess we start with native number system. 
-so we're making the decision to switch to number system now having a rough idea as it performs without it.
-
-so how do we make the switch to zeta's on the GPU?
-we'll have to look them up. or embed them in code. we probably need to try both.
-if we look them up, does that mean constant address space?
-could it go anywhere else? we could put them in bytes.
-
-we don't know any way to calculate these roots, except by exponentiation, right?
-
-i just don't like loading so many values into memory. not just these but the constants.
-which is larger? constants are larger.
-
-maybe only 128 roots.
-why?
-there are 1024 total, divided by 8 that's 128. then it's twice that for all upper levels. 
-but then we only load half of them, so again 128. and then don't need top ones. 
-
-lets review. seems this hardly saves anything. an additive amount. 
-oh, i see. it's a multiplicative amount, because each layer has the same amount of arithmetic. we can save 3 layers this way. we have a total of 8 layers.
-so maybe worth trying with sqrt{2}
-
-
-DIT:
-inside in recursion you use primitive N/k'th ROUs.
-outside you need to evaluate each result on a coset of size k.
-you can instead multiply monomials by a representative of the coset, and then eval on the subgroup the k'th ROUs. 
-so you can store 1/k of the zetas.
-
-DIF:
-outside is eval on the subgroup the k'th ROUs.
-on the inside, you want to eval on the cosets. for each you can scale monomials appropriately, then eval on N/k'th ROUs.
-here it seems you only need to store 1 representative for each layer, since you end up back with ROUs.
-on the other hand, as you go down the layers, your outside grows more distant from unity.
-
-so we basically get it. 
-so what about this for CRT?
-why can we not apply DIF?
-maybe we can. split in two and want to evaluate each on half of the m PROUs.
-can we shift one to another? 
-i think so. are they cosets? 
-
-yeah you can do this, using the binary decomp.
-oh no you can't. it's not multiplication, it's exponentiation.
-so we need to see if it's a multiplicative coset.
-
-so I think all there is for us to think about is whether we can apply DIF as we are but with renormalization. 
-with renormalization we need fewer zetas, but you more multiplications.
-this may or may not be worth it for us.
-there's also the option to go to higher radix, especially if we normalize.
-not sure if it's an option without normalizing.
-
-that multiplication is expensive. i guess i'ts not normal to do so. 
-normal instead is to do as we do, letting it partition away from unity.
-
-so with DIF, what about the higher factors?
-well, at the top 3 levels we don't need it, since we're already using powers of 2. 
-
-then on cross thread we can't really do it efficiently since we can swap only two at a time.
-or I guess they could swap multiple times before calculating.
-can we get a formula to apply higher radix when we want?
-just a formula for radix 4 would be great.
-
-
-I think we'll be fine not to do reduce the zetas, cuz it's small compared to the constants we need to load. 
-
-oh, could we even shift if we wanted? 
-primitive ROU's don't form a group.
-question is, can we take of the prim N'th ROUs, 
-
-usually we can take N'th ROUs, and multiply by a rep to get 2N'th ROUs.
-they also come in pairs with equal squares. 
-eg rep could be primitive 2N'th ROU.
-
-can we do the same for prims?
-can we take the N'th PROUs, and multiply by a constant? 
-consider the N'th PROUs to be in terms of eta = zeta^2.
-then the 2N'th PROUs I think are zeta raised to odd exponents. so 
-the exponents are a group under multiplication. but they are not a group under addition.
-
-so suppose we jumped two layers at once.
-
-
-
-we can't say there's no bit reversal. our outputs are reversed as they're not in an order generated by zeta.
-
-
-i guess where you try to save zeta with DIF,
-that's your twiddle to apply anyway, but you're applying to a large poly so you need to take powers. 
-
-
-it's likely we'll have more S than we need. cuz we'd rather read in there than U.
-i'm wondering if we could begin multiplication before we finish reduction.
-No, we will fully reduce using S, then only partially reduce with T. 
-
-S=4,T=5,U=2
-this allows for 2 inputs in a single warp.
-
-remember we want to try doing arithmetic while loading. it's more complex loop unrolling. 
-
-what if we use complex fft instead?
-you have polys and you evaluate them we don't have enough precision.
-
-we'll need 3*3*3 multiplications. rather than 4+2+1
-
-(x+1)(x-1)
-
-we gotta know where the coefs are.
-oh damn, it seems like coefs are still distributed among threads, at most u coefs of each on a single thread.
-so again we'll need cross thread communication.
-can they exchange information as before? that would be the top and bottom. 
-each thread can interact with arbitrary constants. 
-so this cross thread communication should shape our Karatsuba algo.
-only the middle multiplication and final additions require cross-thread communication. 
-so we can communicate as we like. 
-we're already setup to communication with top, bottom. but no reason we couldn't instead do odd, even.
-
-damn, do we need to store the whole tree?
-yup, fuck. well it's the same size as the input. main issue here is we'll have to write it back out to memory. fuck, and send it back to the host. 
-we have a tree. leaves pass through a linear function, and the child is something else that through another linear function matches it.
-f(a1,a2) = b, g(c) = b
-f(a1',a2') = b', g(c') = b'
-c=c' => b=b'
-it really shouldn't matter what these linear functions are.
-f is taking input in poly form, computing CRT form, and multiplying with constants. g is binary composition. 
-suppose we don't hold on to intermediate nodes. prover on CPU gets eval on leaves and folds in half. or first suppose prover folds instances. then suppose we re-normalize. 
-
-how many nodes would we have?
-we have 2 to 1 compression. so as many nodes as leaves. how many leaves? suppose in 8 bit leaves. suppose 8 to 1 compression in elements. so 1024*8 = 2^13 bytes as an input. we must caluclate how many inputs. well if we can do 2^30 input bytes, then that's quite a lot, 2^17 inputs.
-other option is to increase constants in place of fewer nodes. here is where we'd use fast resource loading. giving each block a different set of constants. while we'd like each block to write back as little as possible, we're limited by how many constants we can hold.
-well actually that's not true. at the moment each block reads in its own constants. 
-
-i forgot, do we need to present the intermediate nodes? yeah. do we need to show smallness? no, don't think so. 
 
 
 
 another choice for primes would be cyclos 31 and 16, both requiring 2 challenges. both mod 2^11. both primes only 2 terms. 
 
-supppose I evaluate an integer polynomial at N points (a coset of the N'th roots of unity), and wish to interpolate, applying the inverse FFT. how can I quantify the precision needed, like given a floating precision I'll interpolate with what precision, can I always round to nearest integer? 
 
-it seems to me that complex fft isn't a bad option given speed. 
+right now we got:
+rolled, SD=3,TD=5,UD=2,WD=4,BD=16, time~500 (this is great... if we can keep it)
+unrolled, same, time~64. with primes and WD=3, time~2.4 seconds.
+
+note it would probably be a good idea performance wise for a kernel to process more inputs than it can hold at once. storing the results in shared memory, accumulating them as we go. 
 
 
-comparing P and f32.
+i'd really like to do karatsuba.
 
-we're getting an error with jut T. and it only appears only for T > 5.
-how many threads are allowed? only 32? I thought 1024. 
-oh, it's because we're doing subgroup ops. we need to generalize i guess no to having multiple warps per block. or maybe we already have it, but we need to change the ordering.
-so right now we have it folding in half. 
-i'm not sure if we can properly test until we fix this. we need thread decomp to only happen across warps. this will indeed be the case if we can have multiple elements per block rhater than one large one.let the number of blocks match the number of warps. 
 
-we have S,T,U, with T=32.
-then we need W and B to mark warp count and block count.
-so how does a thread read into it's element?
-sTH+tU+u once accessed it's element.
-but how to get there?
+complex fft:
+can floats recover 64 bit integers? of course not. when you invert you'll get 32 bit values.
+so it seems you can work in another field, but you'll not only need to invert, but you'll need twice the precision. probably not worth it for us in any scenario.
+so we're then left with Karatsbua or Schoolbook, anything else? 
 
-we could take thread position in threadgroup for t, and 
+maybe we do schoolbook and generate bits while simultaneously multiplying by powers of 2. 
+one benefit of schoolbook is we only partially reduce each and accumulate in 64 bits without reduction til end. 
 
-now when we set to 32 threads in a warp and 32 warps in a block, and S=2, we get zero's back. but with U>2 we don't. 
-if there was only one block
+as for offsets, can we not additivel handle it?
+for a single constant, consider h*c where h is how much to shift. you want to subtract this from the commit. you do this for all of points that have been aggregated, which turns out to be the sum of all constants in that column multiplied by h. so indeed as long as we accumulate the sum of all constants we can do it this way. 
+actually that algo requires twice the space too since inputs are read-only. we might as well roll our own.
 
-maybe compare reduction on gpu using complex vs prime, including when we loopunroll. 
+maybe we can try karatsuba on the top level for it's convenience and then schoolbook below.
+
+(p0+x^4q0)(p1+x^4q1)
+p0*p1 + zeta*q0*q1
+
+probably the most problematic is the multiplication of the inside polys. 
+maybe we should try the space efficient version. it takes the same space as schoolbook. that is 2n.
+actually 
+
+an issue with karatsuba is it will probably require all 8 constants present at once. in that case we might as well make state that large, in which case to save anything we'll need longer chains.
+now we want to start with schoolbook.
+
+schoolbook:
+keep an aggregation array.
+multiply by each term of the constant poly.
+that means shifting up by a power, multiplying the lower parts by zeta. then multiplying all by the constant.
+we will instead multiply zeta by the constant once (maybe can re-use this in the seed), and then multiply correspondingly in the current state and add to the aggregate.
+ohhh, the fact that we go block by block not only lets us do a longer chain, but it means we only need that much. extra space. 
+how large is a single element? 
+oh, maybe we don't need
+
+i think i remember 32kb, that's 2^15 for the register space (as for shared memory).
+we have 2^10 threads, so each thread can only have 2^5 registers. indeed that's what we have, SU=32.
+
+
+
+you can start with all 1's in 
+
+maybe worth thinking for a moment about which is superior in proving. 
+lets call them comb and reduction.
+first note we can prove these pretty easily by just using precomputation to them. the commitment need not be computed by the prover. instead the prover needs to hold the constants in memory and take the random comb. note we don't need to extract, thankfully, so i think we can recursively fold down. we must use smaller constants to do this. so here we could use constants with maximal nodes, so maximal folding factor. then how to prove the final ones? this is an interesting problem. i guess what we can do is use the fact we need not extract, and 
+hmm, whenever data is a deterministic expansion derivative of data the prover has knowledge of, we can assume the prover has knowede of that too (assuming prover has knowledge of the algorithm), and therefore we need not extract for a commit to it. so this applies in the case the constants are generated by a seed known to the prover. this seems a good security practice, except that it doesn't allow folding across statements.
+we have trouble widdling down after reaching minimum radix. i guess this is where we want to use the generation. so this actually means we only need to generate them in zkp friendly way for min-radix trees and at the end, so we won't need long chains, and most of the time we can use non-friendly generators. now note we'd want to have as few seeds as possible, simply because that's entropy, yet we can still break them up as parallel. 
+so i guess most of the time it makes sense to use a good generator and a fast one no zk friendly. 
+
+lets suppose seeds and states are about the same size, maybe 64 bits. 
+we're thinking to apply it SU times at least.
+lets get started with this. then hope
+
+we know that we can have the id property since we can factor out the corresponding point, and consider that implicit. 
+
+
+
+https://arxiv.org/pdf/1811.04035.pdf
+https://www.math.auckland.ac.nz/~sgal018/compact-LWE.pdf
+
+
+
+how do we streamline the unrolling?
+in the build process. 
+first issue is that the constants need to be the same across the build script and the running script. 
+
+oh right, we want to read in groups of U. but U may well be beyond vector size. 
+if doing u8. should we have U at most 4? remember we actually like large U. well, U in place of what? in place of S 
+so suppose U < ord. then we need post arrangement. so i guess we'd really like U=3, so no post arrangement.
+
+what if U > 4?
+then we'll have to split into another data type. so you'll have to load eg u16 and split into two u8 values. how to do this? the only way I can think of is shifting or masking. this takes operations. we don't need them now. we write custom for each U. for now we'll always have U <= 4.
+
+we're always operating on the U values in parallel, right? so why not have them as a vector for fewer instructions?
+u8
+U=2,S=2: 69.7
+U=1,S=3: 65.4
+U=0,S=4: 74.2
+u16 (half the output)
+U=2,S=2: 36.9
+U=1,S=3: 34.9
+U=0,S=4: 34.7
+u32
+U=2,S=2: 46.9
+U=1,S=3: 46.0
+U=0,S=4: 46.1
+
+so not much of a difference, but this is just reading, maybe it will change when we have hold all the data. 
+lets try multiplication. suppose we've already shuffled the data, so 
+here we'll need to access the vectors. 
+
+note how we're gonna have to write to shared memory and read in order to add. some warps will suspend after writing.
+one option is to write before multiplication. then a thread can read all terms for a factor and add them together.
+otherwise, you'l need to write multiple times to memory to share partial addition results. but an issue here is we dont want to generate along this direction. 
+if we multiply first, however, then we can indeed add this way. but this will mean non-sequential access, unless we can have each thread read part of the same element
+
+how do we 
+our issue with multiplication is the extra space it takes. up until then we just need the space for the poly. 
+this may mean we can't do a full element in a warp. that's fine, as long as we don't have to shuffle between warps. do we? well yeah but not until the bottom where irreducibles are hend between warps. here we could multiply the outer parts for karatsuba
+
+how do we interact between rounds?
+remember we're assuming that we add everything up in a block even if this means a lot of seeds. 
+so after we finish with an element, whether or multiplied or not, we write to shared memory which should be able to hold all of them since shared memory is about the size of the register file. there's no synchronization here. instead each warp continues at its own pace to reading and writing the next element.
+Every time it's done now with an element, it adds to the one in shared memory. then all thread sync at the end.
+and here is where we drop maybe even all the warps except one that handles adding the 32 elements in shared memory, then writing the sum to global mem. 
+the multiplication can has to be done 
+biggest question still remains of when and where to do constant generation. we're not doing any duplication in a threadblock. so we make the chains as long as possible, 
+uh oh, we'd like to generate seuqnetially across the invocations of a warp, but these are added together. everything in the warp is eventually added together. we'll have a multiple of 32 elements added. I guess we can afford an independent seed for each of them. but then the multiplication within a thread becomes sequential.
+
+can we share the space for generating the constants and multiplying?
+
+i didn't realize, we need to generate a constant term for every factor.
+wow, does every factor need it's own seed? 
+
+suppose we add together 128 of them. that's 4 rounds.
+then we can have identity for 1 factor 
+
+we were thinking to go sequentially across the blocks held by a thread. that's SU. this is fine. 
+oh, it's also fine to go across the invocations if they don't get added together. 
+but then we'll have to rotate what part of an element, each 
+
+maybe it's worth generalizing to where we don't have the special case that an element fits inside a warp. in this case we can't do multiplication. but we will at least go until all reduction arithmetic has happened. then there's just rearrangement to be done. this can be done by writing to shared memory in a certain way, hopefully.
+then you could read from there and multiply, then write new element by addition. 
+but this would be like that hermite form.
+so how do we multiply when an element is spread across threads. 
+even if an element is in a single warp, we probably don't have enough space to multiply. well lets sdd. 
+
+
+
+maybe worth thinking of how to best layout generators. well for the binary generators it doesn't matter.
+but for zk friendly, to make tree reduction fiendly, maybe have a seed for each tree layer, that operates in parallel the outputs of the parent. 
+
+
+so indeed, we're right about the double space being a problem. even halving warps doesn't work, I guess cuz it's its too many registers for a thread.
+so this is a definitive answer that we cannot fully reduce and multiply an element of size 1024 in a warp. 
+
+each thread can use at most 255 registers. what are we using? 2^3*2^2*2 = 64. so that can't be the problem. and we only have 1 warp. we're failing even with a single thread. 
+looks like we had some false info by not initalizing the array (somehow it would give 0).
+actually the aggregate doesn't seem to make a difference. 
+
+if we're going to multiply the blocks in sequence, then we can write each one to memory as we do so. each thread could have it's first block identity, so just write it to memory as is. then use that space for the generator. go to the second block etc.
+
+lets just try schoolbook correctly but not concerned with space for a moment.
+so what's the number of blocks? 
+
+maybe we should complete data arrangement first.
+how so?
+how to do data rearrangement?
+we have data in two forms.
+on the gpu we write into arrays, modify and even exchange among arrays, and then write back with the same mapping. we'd like to be able to view the same state on cpu. or maybe at this point we only want to test the final rearrangement. what is that? it's the coefficient arrangement.
+
+
+suppose we decompose down to irreducibles.
+once finished the irreducibles are still spread out among threads. how so? every thread holds S block parts, each block is size, well it's huge unless we've decomposed. if our ring is size 512, then actually it's size 4. lets go down to fully splitting. that would be size 128. 
+we're at size 256, order 2. we decompose the full way. each thread has S=8 parts. we still need a single swap. 
+we're calculating in two ways and comparing. one is by reduction. we'll want to reduce down all the way except the last. while there are 256 total, we'll only want to go til having 128 factors. second, we imitate the gpu, in thread form. 
+for first agreement, let's do the partial reduction. so we'll reduce to 128 elements. and we compare that with our thread reduction.
+ok, we got that. now we need to apply the final swap. 
+it seems here each thread contains offsets by 32, and 8 of them. 
+does that make sense? there's 256 bits total. there are 32 threads.
+32*8 = 2^5*2^3 = 2^8 = 256. so this is correct. 
+now there's 128 blocks. we'd expect them to be in 32 groups of 8. 
+so actually they're not in groups, but just offset by 32. is this what we expect? what do we expect? well this layout is indeed what we expect in relation to the original coef form. but here we're comparing with the reduced coef form. well i guess that's our target.
+we should reduce from 256->128->64->32->16->8->4->2, that's 6 times. each thread here as 8 values, so can only reduce 3 times. we'll decompose the rest using cross thread logic. 
+and we end up 
+
+whereare we at the end of independent thread reduction?
+we've done three layers of reduction. so there should be 8 factors. each thread holds a part of each factor.
+lets try the first round of cross-thread reduction. we should split the threads in two. each block should now be cut in half. where is block 0? how large is block 0? it has 32 elements. those 32 elements should be dispersed across the bottom 4 threads. 
+every 4 blocks should contain consecutive elements. so the offsets between elements in a thread should still be 32. and between threads they should still be consecutive. the 5'th element should not belong to index 0 of thread 5, but rather the second element of thread 0. 
+we decomposed across threads once and the layout is the same. every thread still contains one from each block. 
+
+block 0 is had by the first index of all 32 threads. 
+we want to split this block in half. 
+so thread 0 should exchange at index 0 with thread 16. 
+
+thread 0
+2240599212
+thread 16
+1331822491
+
+we don't want to look for the relevant zeta, but we know that summing them and dividing by 2 should yield the lower.
+24789579 + 178153484
+and indeed it does.
+at this point we should have split the threads in 2. 
+now thread 0 shouldn't represent all blocks, should it?
+thread 0 exchanged with thread 16.
+i guess thread 0 should represent every other block.
+well actually thread 0 seems to still represent all offsets of 32.
+when a block splits, where do the two parts go? consecutive, right?
+
+so what's the current layout after one round of cross-thread reduction?
+
+what's different?
+before thread 0 at 4th element would represent halfway through. 
+
+before we had index 0 across all threads representing block 0.
+now block 0 has split in two, but still occupies the same space. 
+at the same time, the zero indices of all thread have interacted, so the two blocks still remain represented in that index. 
+hmm, actually seems that yes, there's no difference in layout except algebraically which you can't see. 
+oh wow, so at the end while a thread only represents S blocks, they are separated by 32. i thought we were getting closer, more locality. yes we are. a block is now represented by fewer threads and they are continuous. well actually that's always the case, now they're just smaller.
+so we should be able to look across threads to get the blocks. again this is just algebraically visible.
+so if we have blocks size 2, block 0 should be had by index 0 of threads 0 and 1. we'd also expect block 0 to appear as at the 0,1 indices of the regular reduction. isn't that the mapping that's always true? 
+
+so does the layout change or not?
+we know the layout of a thread doesn't, and therefore nothing should change.
+
+what would happen if we continued to reduce beyond irreducibles, but just exchanging data?
+we thought before that we'd end up coalescing blocks inside threads. 
+but in order to do so, we need to reduce the number of blocks a thread represents. 
+suppose we wrote to shared memory as is. then it would be contiguous. if we instead exhanged data we'd be writing to every 8'th element. would this cause a bank conflict. we can assume 32 banks, so this would cause a 4-way conflict. one way around this is to offset each write by its thread index.
+to count down the elements in coef order, count down in threa major order. 
+
+so maybe we need a different kind of data movement. 
+do we really want to do this data movement?
+or do we want to try multiplying while they're distributed?
+issue is we don't have the constants. well actually the constants could stay put, and if we're doing schoolbook, we just swap around the commit data. 
+how about using Karatsuba? 
+
+simplest might just be to write the decomp to shared memory, then start generating the 
+
+lets do karatsuba. it saves time. we can write half the data to memory, then use that half to multiply the other half. 
+major question is where we use chains. we long longer ones simply in order to have less to load. if we were to load them, we'd load them in parallel but with sequential instructions, so maybe it's just as good to generate them in sequence. do we use them across blocks? yeah i guess so. that's a 1024 factor. and i think it would be also fine across invocations.
+so how do we iterate through the blocks and generate. 
+
+maybe in order to max occupancy we don't want all elements in a single warp. 
+but they have to communicate at the start of cross-thread, right? no, we could wait to have them communicate at the end? that is, could we have threads first communicate 
+
+what if we had half the rank?
+we could tolerate this, it would be rank 512 with degree 4. 
+what's the cost? well it means twice as many constants. but here generating them it may not matter.
+there's less for challenge, more like 18 instead of 16 bits. which is fine. we still do the same number of NTT layers. now for each element there's 2 multiplications degree 4. in total 4 mults degree 4 rather than 1 degree 8. how does that compare asymptotically? 8*3 vs 4*4*2, so 24 vs 32.
+what's the benefit here for us?
+it's the independence. we can more easily fit an element in a warp, fully reduce it, and sequentially go through all multiplications needed. each thread only needs 16 registers for reduction. then we only use a little more in order to sequentially generate the constants and also 
+
+does this 512 ring help with other cyclotomics? p=31, with order 32, works. that would be interesting. how to reduce once we've filled up a short? 2^5=1 => 2^{k*5}=1 so you take chuncks of 5 bits and add them together.
+these extra 5 bits may be all we need. 
+note it would require another NTT but with the same input, so done by the same warps... in sequence, so we could continue the chain. 
+here it's the NTT that's probably not worth the few extra bits. that NTT requires the same amount of time, but I guess the good news is it takes less storage and the zetas are small.
+also cyclo 2, p=3, so you take all odd bits and add and all even bits and subtract.
+
+another is cyclot 31, that's 2^31-1, but here the issue is only 60 bits.
+
+i imagine we'd try to compute the NTT's in parallel cuz sequentially we'd need to keep the input. 
+
+oh damn, maybe we need modulus more than input, so we can only encode trits using p=3, and only encode 4 using p=31.
+no that's not true. we can think in terms of CRT composite. it's just the absolute number that matters.
+most convenient choice for now seems to be H or p=2^31-1 (cyclo 31), along with p=31 (cyclo 5) when we need it. 
+while cyclo 31 doesn't have power of 2 roots, it's arithmetic is faster. but oh, shit, it doesn't have any roots, but that's fine, it still splits. so for now, with this strategy, we can easily swap the prime H vs H' (2^31-1), but we need to develop NTT for p=31 alongside. 
+with p=31 we're thinking for 512 ring. 
+oh fuck, isue with 2^31-1 is two challenges. this may not be that bad. if we go for 2 challenges. 
+
+note we could also use both H and H' and ring size 512, and only 1 challenge? no. using H' it still splits. 
+
+generating two challenges won't be too hard. computing both also won't thought it takes twice the space. it's the renormalization of both, and commititng to both that's most costly. but we'll see, cuz H' arithmetic may be more than twice as fast as H. 
+
+so our question now is whether or not we can do better with 512. the benefit is holding less in memory. you only do degree 4 mults, and two of them but you can in sequence, and there's twice as many elements to commit. but doing the constants in sequence (writing them to memory as we go), we can say with 512 it takes half the memory. so would we like two of half the memory instead of 1? yes i think we would. maybe we try both. maybe best of all is the simplicity.
+
+of course we want to specialize right now but with performance around the best, so not sacrificing.
+now first thing we can try, is having U=4, with bytes and u16's as inputs I guess (compare), and in this case we shouldn't have to do any post-decomp movement. 
+suppose we try this. we need to multiply dgree 4, probably with Karatsuba.
+note it requires the same number of zetas, and in fact the same ones. 
+a0+a1x+a2x^2+a3x^3  b0+b1x+b2x^2+b3x^3
+so we'll multiply these within single threads.
+upon multiplying the top two, they'll get added to the bottom multiplication, degree 2.
+then the middle is also degree one, going to quadratic, but then lifted up to cubic.
+do we perform these in parallel? maybe we generate all 4 constants at once, then we multiply in parallel.
+or we generate and multiply at the same time. the issue here is we basically need all the constants at once, right? you need to multiply bottom, top, then add. so yes. 
+we need space 12. naively how to implement?
+how much do you need for linear?
+you have space 4, though output is space 3.
+(a0+x*b0)(a1+x*b1)
+0: a0*a1
+1: a0+b0 -> 1*3-0-2
+2: b0*b1
+3: a1+b1
+so this means we can take the bottom and top and multiply in place.
+
+
+(a0+x*b0)(a1+x*b1)+(c0+x*d0)(c1+x*d1)
+0: a0*a1+c0*c1
+1: a0+b0 -> (a0+b0)(a1+b1)
+2: b0*b1+d0*d1
+3: a1+b1, c0+d0
+forget the linear mults. can we do the 
+
+a0+a1x+a2x^2+a3x^3  b0+b1x+b2x^2+b3x^3
+
+i'm now wondering if schoolbook also requires 3n. a native algo does. only way not to is to generate the constants one or a couple at a time. at size 4 we probably won't do this, at least not to a big difference. 
+so maybe we just use 3n and do karatsuba. 
+
+would 1024 seeds be too much? probably not. but each would only be length like 4*4*64 = 2^10, or whatever such that starting with 1024 seeds, we have a thread group 
+
+actually, a reaonsable solution so make chains 32 times larger would be to share among threads in a warp, starting the generation at the beginning, swapping among threads as we compute ntt. this would be good use of space. i guess this means generating all the constants for a thread before passing it to another... but this is duplicated code...
+maybe better to still start with 1024 seeds, but instead of waiting til end to generate we can do so during ntt. then we'll need an extra n space. 
+alternative is one warp generates and writes to shared memory. it would have 32 seeds, each can be responsible for a simd lane index. it would probably be faster than the NTTs. ok, this is nice because we can take advantage of that read-only mem, so we only need one extra n space rather than 2. note we'll have to synchronize. threads can overwrite the constants as they give output, but we'll need enough shared mem for both the constants and also accumulator... there may not be enough. 
+
+interesting. for 6,6 it says not enough registers. for 6,5 or 5,6 it gives 0, and for 5,5, it copies as it should. so even here there's the issue of 0 output. why? 
+so hopefully reading and performing comps take the same mem. we can with 16 warps get up to S=2^6,U=2^5.
+with 32 warps we can get up to S=2^7,U=2^4. that's a lot more than we need. maybe lets go ahead and try karatsuba for 1024 despite the extra space. 
+now i'm back a couple days later and with 32 warps just io with U=2^4 we can't even get S=2^1. so maybe it is indeed behavioral, drastically. that's a factor of 2^6.
+but before, that's 2^11 registers per thread.. a ton, 2048, could that really be?
+actually before we got similar behavior 2, 32 registers per thread, 512 threads.
+can i complain about this alone? I though register file is 32kb, that's 2^15.
+we have 2^9 threads, and 2^5 registers in each. so it makes sense. hmm. this is in rolled form. lets try unrolled. i'm getting about the same unrolled, but we can get 2^10 threads. 
+
+what if we check poly instances with random combs. you'll have to compute error terms, but maybe not quotients. 
+
+are we going to want to do arithmetic in vector form? would this allow for optmizations? here the issue is we seem to need more space. 
+
+now we can't even get SD and UD to add up to 4. before we could. maybe it's this business of processing in groups of U.
+yeah, doing U serially seems to save space, 1 bit of space. 
+
+
+lets move on to doing multiple blocks.
+we'll have a loop that processes elements then adds them up in aggregate. 
+we need to figure out where each round reads from. 
+each round can read from a different part of global memory. remember we want to be able to write back to the same area at the end, and we want them to be continous. 
+so where do we read from? suppose each read continuously. then on writing back results would be scattered. we can have blocks read sequentially. every warp should read it's first as it is now, then it should read the rest at appropriate offset. whats that offset? it's the amount read by all warps in a block. each warp reads one element, so for W warps thats W*D. 
+within a block then, a thread has an offset in this range, and in the q'th round it reads at the same index with offset q*W*D
+
+
+
+the following works \% P
+pub const ORD: usize = 8;
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 8;
+pub const WD: usize = 4;
+pub const BD: usize = 8;
+that's a total 8+4+8+3+5+2=30
+it's curious how S uses more registers than U. either way we can fit D=1024 in a warp. 
+seems S=2, and U=3 is the best we can do. U=4 or S=3 both return 0.
+but thank god for this, because U=8 is what we need for D=1024.
+following also works.
+pub const ORD: usize = 8;
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 9;
+pub const WD: usize = 4;
+pub const BD: usize = 7;
+with \% P takes 25 seconds, with u32 takes 300. note still rolled. 
+surprisingly writing at only the end rather than at every iteration doesn't save much. 
+also surprisingly (see https://www.desmos.com/calculator/zugscplhmz) larger V doesn't make much of a difference for performance, so the difference for us is just longer chains benefit. we still might get best performance with just a few blocks like 4 or 8.
+but we should only seriously consider these tradeoffs when trying with unrolled and our number system. 
+wow, looks like by 2^30 we're committing to exactly 1 gigabyte, great. maybe by ridding of output we can get 2GB.
+
+
+what next?
+we still need to unroll and also put in number system. but those are independent.
+let's first complete kernel.
+we aggregate in our acc. at this point we need to do the final reduction.
+this means writing to shared memory. (note we should later try aggregating in shared mem and see if we can increment SD or WD).
+so once each warp has aggregated, we write i guess just directly to shared mem. 
+each warp has an element size D, there are W warps, so we'll need DW space. 
+
+or what if we just do aggregation right here using atomics? oh, we could use addition in 64 bit. then we'd need one thread to reduce them and write result to global mem. 
+
+
+i still don't see how to set threadgroup shared mem. we don't want to declare fresh inside each kernel. so instead we pass in a pointer. i guess this pointer points to the beginning of what we allocated. 
+
+
+
+lets try to send 4-vectors with subgroups. but not if we have to sacrifice registers, or maybe, just check speed. 
+
+i realized we probably want to do multiple commit passes for one commit. because we can have huge radix, like input 2^30 and output only as many second layer nodes as blocks, which is prob less than sqrt, but still large enough we don't want cpu to do it. so we'll send over more input size n-sqrt{n}. so we have the ability here to pile up lots of commits. can we use this? just think of sending over tons of input for a single commit. yes, that was the plan, we do the execution trace and commit to it, and then go through again. what if we're not aggregating all of them at once? then we'll end up storing blocks of it to be normalized, and note we can send these over for commit since the gpu was done prior with commits. there shouldn't be much of a gap of cpu waiting for commit cuz we send it less and less until the very end. 
+would be great if we could reach a terrabyte in a subsecond.
+now what's the structure for folding? it's consecutive subtrees. 
+they don't all need to be the same shape. and i think we can have the input segments folded and the input segments sent completely independent. folding segments are determined by arithmetization, we don't care about it on cpu. but we still need to count somehow. 
+the question i'm looking at is how to combine the intermediate nodes with the new input. 
+one possibility is the natural way for the gpu where we have a starecase. in this case you go through and fold the top stair, then next, and you'll end up with every step having larger norm, and more steps, proportional to many blocks you committed to. 
+eventually when we'll have to start reducing the intermediates. maybe we can dedicate a block/warp to processing the latest intermediate nodes, but probably not. so we don't touch the intermediates of next layer until we've writting all those of the current.
+now how do we structure the tree? a different kernel will handle each tree layer, so we can have different radixes (also different constants or rings but less likely).
+actually maybe easiest to begin is layer 1 tree, where we use new constants, those are new (truly random seeds) encoded in the new kernels. so we can go for as many kernels as we have. 
+if we do this, we every round just write input to same place then launch a new kernel. we'll get the best performance with this, and it's simplest, so we begin with this. oh wait, you don't read decompose those but rather add to them. so you decompose the rest then add to them. so hopefully it's the same kernel, just different seeds. 
+now we started this to consider where to write outputs. at offsets would be nice, m only concern is we'll need the buffer for new input to be almost sparse but large. we'll have a heap. yeah i don't see a way for offsets. if we don't want sequential then have a different resource for each. but we want to overwrite. so we'll try contiguous. 
+
+right now we're trying to write back appropriately.
+we have vars b,v,w,s,t,u
+is that the correct order?
+an element is std. does w or v come next? 
+if v, then each warp reads contigous across v. that doesn't help much.
+but it may help to do so across warps, so we make w next.
+then what? then probably v. actually probably not. b should be next, then v, so that v=0 are continuous across blocks. 
+maybe that's wrong too. we're only writing, not only to v=0, but to w=0. therefore we need
+v,w,b,s,t,u
+so this means warps read from different areas, but 
+
+
+says 16B reads are most efficient on M1.
+
+
+
+apparently we should use global atomics, fast. wow. if we use 64 bit, we could indeed have a single level tree but it requires all threadgroups to use different constants. 
+
+
+unexpectedly, wheras reduction with shared memory doesn't take any more registers (though shared memory), we lose another bit. 
+frustrating, makes no sense, S=2, with U=3 works, with U=2 splits out zeros, not even using shared mem. 
+so the U problem is one thing.
+then with U=3, it seems the issue is the barrier. even if not a memory but an execution barrier, it fails, suggesting maybe it can't run all the warps at once. 
+
+so we can ask, we have a kernel, high register usage.
+we try without execution barrier and it succeeds, then with execution barrier an it fails. how can this be if all warps are resident at once?
+similar question about register usage.
+
+https://developer.apple.com/forums/thread/725908
+
+with this unpredictability i'm realizing we may just need to do a lot less in each threadgroup, and this will require more complexity of reducing cross-thread. 
+ok, luckily now it's failing with SD=UD=1
+
+
+
+using cyclo 61 may be a good idea. noting we don't have to check intermediate nodes for smallness.
+and it's fine for fft cuz it splits into quadratic terms mod any power of 2. 
+we take advantage of cpu 64 bit mult. only need 1 lattice challenge. the issue is multiplication on the gpu. of course we use karatsuba. but note this take 3 mults rather than 2. it's the reduction that should be faster than 2 reductions. so split into low and high parts, storing them in u32. multiply bottoms and tops. but how do we split? i guess 31 and 31, so top exponent becomes 62, so 2^62=2^61*2=2 so you multiply the top by 2 and add to the bottom. then you add together bottoms and top and multiply, and if the same shift on both, say 31, then you'll take like the top some bits and they'll go to the bottom. 
+note we can prepare the zetas to be shifted instead by 2^30 so we can get exponent 2^61=1.
+now we'll still have order 2 terms, so multiplying these is not ideal. but this one is still worth trying. 
+
+
+
+what can we say when we evaluate on X^n-z? well actually this can serve for fft, right? i mean, does this give you info on n eval points? the question is whether it determines n points, determines enough for poly product. yeah it does. but you'd have to multiply. we were planning to amortize these, but not actually multiplying, right? no, we need to multiply them, maybe unless you want to commit both and we dont. so this is an issue with ffts. whereas with H, we can do fft small enough so it fully splits, FFT's of size 128. or maybe 256. this should sakve a constant 8 sumcheck rounds. but that's actually just regular fft noting multiplicative group has 2^8. also has 3 and 5 or 7 i think. so maybe just regular fft better. 
+
+
+
+
+trying schoolbook. 
+we go through the powers of the constants. we have an aggregate array.
+on every shift, we would bring the top to the bottom and multiply by zeta. until you've multiplied by degree n-1. 
+you rotate n times, first time not at all. 
+each time you rotate you multiply the shifted element by zeta, then all elements by the constant, then add to aggregate. but 
+
+we can basically assume due to randomness that it will overflow. so if we aggregate in 64 bit space, we know it only overflows once. so answer is correct answer mod 2^64 = 2^32*2^32 = epsilon^2. so you can easily reconstruct the result by just adding epsilon^2 or something and reducing. while taking twice the space it saves a lot of reductions. 
+
+now what are the zeta values?
+they are the 128 irreducibles. we reduced using these in the last round. they should be the same ones. 
+first lets try 512. 
+first of all, we should already have it in proper reduced form since it has terms dgree 4 and U=4.
+
+lets try smaller first. lets try with block size 0. then we need size  at least 256. 
+what do we expect to see? well we expect the same lexicographic order. it's just that now with U=2 we expect to see it in blocks of 2, and with blocks size 2 weknow they correspond. ok, we see what we should. 
+so we're relying on the native reduction to be correct. we expect it to split ou the factors in correct order in correct coef order too. maybe we can check on wlofram alpha. great. it works. 
+now we just go through and do aggregation. 
+
+we need to identify the correct zeta for each block. 
+first of all, the zeta level should be the last one, that's k+2 = log(S)+logT+2
+then we'll pass across i, but actually every thread will only pass over S i values. they're in sequence. so thread in index t skips over the first t*S i values.
+lets make sure of the zeta level. we have 128 factors, but actually they come in paris, right? yeah. so this can optimize our multiplication, right?
+well no, we're no longer splitting. it only havels the number of zetas to store. so we're going to access the same zeta twice. one is the additive inverse of the other. so we'll just aggregate by subtracting one of them.
+remember when we split we add on the bottom and subtract on the top. the true zeta belongs to the bottom. inverse on the top. so we'll subtract on the top. 
+
+we can also just do karatsuba allocating temporary arrays relying on copiler to handle
+
+todo:
+generate the code.
+change number system.
+write output to shared memory.
+invoke multiple times, chaining and swapping seeds. 
+try storing all constants.
+try karatsuba. 
+adjust for post-decomp movement.
+try with other primes like 31. 
+
+we can add permutations to the generation, as in PCG, later if we decide to share among multiple threadblocks. the two reasons we wouldn' do this is if we don't share among threadblocks, in which case we'll want it zk friendly and it's so short lcg should be enough, and the second reason if sharing between threadblocks means writing to global memory, and seems you're not really saving space there, maybe better to use constant address space. 
+
+we're going in sequence for each of the S blocks. after each block we're writing to output. this may not save any space, but hopefully it speeds up the writing.
+for both schoolbook and karatsuba we'll generate the code. for karatsuba, do we generate all constants first? do we allocate another array for them? 
+for schoolbook we only allocate an array of S, and the state and seed. that's minimal.
+for Karatsuba we need to read multiple of the constants at once. i'm gonna guess we indeed need the generate them all before we can multiple. so here we'll need to allocate an output space size n (analogous to the aggregate), the difference now is we need to allocate for and generate all n constants. then the extra log(n) space we'll just dynamically allocate with registers. 
+
+
+how much space will karatsuba take?
+for degree 4, we need to store the sums in another array. then we multiply three linears in parallel using this space. 
+does this generalize? well you'll have to allocate more space but it could be done additively, though not in parallel. i like this. we can dynamically adjust the space vs ILP. I think it's n+n/2+n/4+.... = 2n. that's additive, or its' n+3(n/2 + 3(n/4 + 3(n/8)))... i'm just thinking about like for 31.
+
+starts out with h=0, and f0=0, and f1=f
+
+
+how to generate this?
+we need inputs to be in the form of slices. 
+can we do it by passing in plain ids? we may want to pass in A[3..6] and instead we pass in A', so it generates instructions A'[1..2]. then we need to translate this to A[3+1..3+2]
+so how to specify indices so we can compose them? closures? if it's a string we'd have to parse it. return is a list of instructions which refer to indices in the aruments. we want to parse these instructions. so an instruction needs to reference ids along with indices. 
+of course ids can just be indices too, indices of the arguments. so the only argument is then k. 
+
+ohh, i forgot about the subtraction of the outsides from the inside. 
+
+how might we do it?
+hopefully we can avoid the complexity b overwriting the input.
+you can start with the outsides. you multiply the two and place appropriately, could also do so summing. then you add and place on the inside (or wherever) overwriting. then you add that to appropriate output, in special case rotating it. 
+suppose you do middle first. thing here is you have add them first. where do you put them? you could put them on the outside of the output. then you multiply into the middle. no, you can't do that. so lets just use our simple algo.
+oh no, recursion doesn't hold. we can't modify the input when computing the outsides. cuz we'll still need to multiply. 
+oh, for them the h is only in the bottom, since they're not folding.
+below the top level we're in the same situation. in this case we can write i guess you their algo, cuz we don't want to modify the inputs. but at the top level, we can modify and we also don't have the spare room. does this work out?
+after we multiply top and bottom, we can wrie the sums to anywhere in the input, suppose the two insides. so it's an issue. we can only call invocation overwriting the top output. and if we use their algo at the top we need twice the space. 
+
+so can we manage for this karatsuba?
+we can multiply the parts, but it seems only if we use an extra n space.
+lets try that. we'll generate the constants. we'll have an acc same length as array. then we'll have an aux same size as a block, that's U.
+
+what about the single vs multiple f? first time i guess we launch with f0=0. can we reduce instructions?
+
+
+A = 0,0
+B = 2,3
+C = 2,3
+D = 2,3,0,0
+
+h0 = 2
+h1 = 3
+gamma0 = 25
+gamma1 = 0
+alpha_0 = 4,
+alpha_1 = 0
+beta0 = 9
+beta1 = 0
+
+0: 2,3,_,0,0
+1: 2,5,_,0,0
+2: 2,5,_,5,0
+3: 2,30,_,5,0
+4: 2,30,_,30,0
+5: 6,0,_,30,0
+6: 6,0,_,30,0
+7: 6,24,_,30,0
+8: 6,24,_,9,0
+9: 6,15,_,9,0
+
+we managed to generate code, but the algo gives the wrong answer. to debug. 
+now lets generate the schoolbook code. 
+
+
+
+
+
+
+
+
+
+
+
 
 
 

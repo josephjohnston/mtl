@@ -8,6 +8,7 @@ mod shaders;
 #[allow(arithmetic_overflow)]
 pub extern "C" fn rust_addition() -> i32 {
     naive::go();
+    // shaders::gen();
 
     // let mut infos = GPU::current_gpus();
     // let info = infos.remove(0);

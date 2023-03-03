@@ -1,6 +1,9 @@
 use hal::*;
 use num_modular::ModularCoreOps;
 use rand::Rng;
+
+use super::shaders::params::*;
+
 const nums: [u32; 2048] = [
     8, 159, 24, 145, 75, 75, 186, 39, 84, 215, 209, 0, 240, 118, 115, 40, 9, 223, 4, 9, 105, 36,
     24, 204, 217, 96, 47, 220, 162, 141, 212, 151, 142, 155, 53, 204, 121, 101, 79, 39, 161, 48,
@@ -103,37 +106,15 @@ const nums: [u32; 2048] = [
     46, 201, 31, 47, 215, 20, 16, 76, 216, 109, 41, 198, 133, 123, 203, 97, 60, 13, 245, 147, 162,
     44,
 ];
-// // use shaders::*;
-// use super::shaders::*;
-
-// pub fn go() {
-//     let mut func = Function::new();
-//     func.for_loop().for_loop();
-//     println!("{func:?}");
-// }
-
-const SD: usize = 0;
-const TD: usize = 5;
-const UD: usize = 3;
-const WD: usize = 5;
-const BD: usize = 0;
-const S: usize = 1 << SD;
-const T: usize = 1 << TD;
-const U: usize = 1 << UD;
-const D: usize = S * T * U;
-const W: usize = 1 << WD;
-const B: usize = 1 << BD;
 
 pub fn go() {
-    // decompose_within_threads_code();
-    // decompose_across_threads_code();
     let mut infos = GPU::current_gpus();
     let info = infos.remove(0);
     let gpu = GPU::new(info);
     let queue = gpu.new_queue("queue".into(), 4);
 
     let shaders_url_str = "file:///Users/josephjohnston/saga/zpu/src/shaders/";
-    let archive = gpu.new_archive("test".into(), false, shaders_url_str);
+    let archive = gpu.new_archive("rolled_macos".into(), false, shaders_url_str);
     // let archive = gpu.load_archive("risc0".into(), shaders_url_str);
     let pipeline = archive.load_pipeline("go".into()).unwrap();
     drop(archive);
@@ -143,55 +124,39 @@ pub fn go() {
     let block_size = Size::new(T * W, 1, 1);
     let grid_size = Size::new(B, 1, 1);
     let mut rng = rand::thread_rng();
-    let mut input = gpu.new_buffer::<u8>("input".into(), D * (W * B), true);
-    // let nums: [u32; 128] = [
-    //     128, 143, 197, 41, 175, 149, 243, 66, 118, 61, 153, 125, 96, 223, 99, 179, 10, 121, 110,
-    //     226, 246, 40, 120, 194, 155, 31, 18, 210, 72, 74, 104, 138, 65, 69, 132, 93, 251, 27, 102,
-    //     237, 222, 50, 147, 1, 87, 40, 248, 89, 54, 154, 97, 153, 226, 177, 159, 82, 108, 130, 243,
-    //     57, 246, 140, 165, 132, 246, 221, 254, 39, 112, 41, 149, 47, 223, 177, 121, 62, 227, 205,
-    //     83, 171, 216, 173, 86, 97, 49, 87, 88, 49, 6, 209, 163, 52, 225, 187, 66, 132, 224, 55,
-    //     200, 168, 118, 6, 3, 7, 108, 172, 2, 193, 2, 11, 121, 30, 197, 247, 148, 189, 20, 77, 4,
-    //     72, 212, 181, 101, 121, 26, 245, 140, 253,
-    // ];
+    let mut input = gpu.new_buffer::<u8>("input".into(), V * W * B * D, true);
     for (i, x) in input.as_mut_slice().iter_mut().enumerate() {
         *x = rng.gen::<u8>();
-        // if i < 128 {
         // *x = nums[i] as u8;
-        // } else {
-        //     *x = nums[i - 128] as u8;
-        // }
-        // println!("{i}: {}", *x);
     }
-    let output = gpu.new_buffer::<u32>("output".into(), D * (W * B), true);
+    let output = gpu.new_buffer::<u32>("output".into(), V * W * B * D, true);
 
     let mut timestamp_sampler = gpu.new_timestamp_sampler(5, false);
     let batch = queue.new_batch(false);
 
     let cpass = batch.new_compute_pass(Some(&mut timestamp_sampler));
     cpass.set_buffer(0, &input, 0);
+    cpass.set_threadgroup_memory_length(1 << 20, 0);
     cpass.set_buffer(1, &output, 0);
-    // cpass.set_bytes(
-    //     2,
-    //     (&D as *const usize).cast(),
-    //     1 * std::mem::size_of::<u32>(),
-    // );
     cpass.set_bytes(
         2,
+        (&V as *const usize).cast(),
+        1 * std::mem::size_of::<u32>(),
+    );
+    cpass.set_bytes(
+        3,
         (&W as *const usize).cast(),
         1 * std::mem::size_of::<u16>(),
     );
     cpass.set_bytes(
-        3,
+        4,
         (&B as *const usize).cast(),
         1 * std::mem::size_of::<u16>(),
     );
-    // cpass.set_threadgroup_memory_length(1 << 15, 0);
     // cpass.set_imageblock_size(1 << 5, 1);
     cpass.set_pipeline(&pipeline);
     cpass.dispatch(block_size, grid_size);
     cpass.end_encoding();
-
-    // gpu.resource_usage();
 
     println!("going!");
     batch.commit();
@@ -200,167 +165,12 @@ pub fn go() {
     timestamp_sampler.get_timestamps();
     println!("results:");
     for (i, x) in output.as_slice().iter().enumerate() {
-        if i % (1 << 10) == 0 {
-            println!("{i}: {x}");
-        }
-    }
-    // compute correctly
-    // println!("calculating CPU version");
-    // let mut out = vec![0; D * G];
-    // for g in 0..G {
-    //     for t in 0..T {
-    //         let mut array: [u32; S] = [0; S];
-    //         // READING INPUT
-    //         for s in 0..S {
-    //             array[s] = input.as_slice()[g * D + s * (D / S) + t] as u32;
-    //         }
-    //         // DECOMPOSING WITHIN THREADS
-    //         for k in 0..((S as f32).log2() as u32) {
-    //             for i in 0..(1 << k) {
-    //                 for s in 0..S / (1 << (k + 1)) {
-    //                     for u in 0..U {
-    //                         let hi_index =
-    //                             ((2 * i + 1) * (S / (1 << (k + 1))) * U + s * U + u) as usize;
-    //                         // let mult = vals[hi_index].mulm(zeta(k + 1, 2 * i), &P);
-    //                         let mult = array[hi_index] * (1 << 20);
-    //                         let lo_index =
-    //                             ((2 * i) * (S / (1 << (k + 1))) * U + s * U + u) as usize;
-    //                         // array[hi_index] = array[lo_index].subm(mult, &P);
-    //                         // array[lo_index] = array[lo_index].addm(mult, &P);
-    //                         array[hi_index] = array[lo_index] - mult;
-    //                         array[lo_index] = array[lo_index] + mult;
-    //                         // let hi_index = (2 * i + 1) * (S / (1 << (k + 1))) + s;
-    //                         // let lo_index = (2 * i) * (S / (1 << (k + 1))) + s;
-    //                         // let mult = vals[hi_index] * (1 << 20);
-    //                         // vals[hi_index] = vals[lo_index] + mult;
-    //                         // vals[lo_index] = vals[lo_index] - mult;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         // DECOMPOSING ACROSS THREADS
-    //         for l in 0..((T as f32).log2() as u32) {
-    //             for t in 0..T / (1 << l + 1) {
-    //                 for r in 0..(1 << l) {
-    //                     let lo_index = (2 * r) * T / (1 << l + 1) + t;
-    //                     let hi_index = (2 * r + 1) * T / (1 << l + 1) + t;
-    //                     // println!("threads: {lo_index}, {hi_index}");
-    //                     // let idx = Self::logT() - l - 1;
-    //                     // let mask = 1 << idx;
-    //                     // let sigma = tau ^ mask;
-    //                     for s in 0..S {
-    //                         let i = s * (1 << l) + r;
-    //                         let zeta = 1 << 20; //Self::zeta(Self::logS() + l + 2, 2 * i);
-    //                         for u in 0..U {
-    //                             let lo_coef = array[(lo_index * S * U + s * U + u) as usize];
-    //                             let hi_coef = array[(hi_index * S * U + s * U + u) as usize];
-    //                             let mult = hi_coef * zeta;
-    //                             array[(hi_index * S * U + s * U + u) as usize] =
-    //                                 lo_coef - mult;
-    //                             array[(lo_index * S * U + s * U + u) as usize] =
-    //                                 lo_coef + mult;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         // WRITING OUTPUT
-    //         for s in 0..S {
-    //             out[g * D + s * (D / S) + t] = vals[s];
-    //         }
-    //     }
-    // }
-    // // compute expected output
-    // println!("calculating correct");
-    // let mut correct = vec![0; D * G];
-    // for g in 0..G {
-    //     for j in 0..D {
-    //         correct[g * D + j] = input.as_slice()[g * D + j] as u32;
-    //     }
-    //     for k in 0..((S as f32).log2() as u32) {
-    //         for j in 0..(1 << k) {
-    //             for l in 0..D / (1 << (k + 1)) {
-    //                 let hi_index = g * D + j * (D / (1 << k)) + D / (1 << (k + 1)) + l;
-    //                 let lo_index = g * D + j * (D / (1 << k)) + l;
-    //                 // let mult = ref_in[hi_index].mulm(1 << 20, &P);
-    //                 // ref_out[hi_index] = ref_in[lo_index].addm(mult, &P);
-    //                 // ref_out[lo_index] = ref_in[lo_index].subm(mult, &P);
-    //                 let mult = correct[hi_index] * (1 << 20);
-    //                 correct[hi_index] = correct[lo_index] + mult;
-    //                 correct[lo_index] = correct[lo_index] - mult;
-    //                 // println!("hi: {}, lo: {}", correct[hi_index], correct[lo_index]);
-    //                 // println!(
-    //                 //     "hi_val: {}, lo_val: {}, mult: {}, lo: {}",
-    //                 //     ref_in[hi_index], ref_in[lo_index], mult, ref_out[lo_index]
-    //                 // )
-    //             }
-    //         }
-    //     }
-    // }
-    // // outputs
-    // println!("comparing outputs");
-    // for g in 0..G {
-    //     for j in 0..D {
-    //         println!("{}: {}", g * D + j, output[g * D + j],);
-    //         // println!("C: {}: {}", g * G + j, correct[g * G + j]);
-    //         // assert_eq!(correct[g * D + j], out[g * D + j]);
-    //         // assert_eq!(output.as_slice()[g * D + j], out[g * D + j]);
-    //     }
-    // }
-}
-
-fn decompose_within_threads_code() {
-    let mut code = String::with_capacity(1 << 10);
-    for k in 0..(S as f32).log2() as u32 {
-        for i in 0..(1 << k) {
-            for s in 0..(S / (1 << (k + 1))) {
-                let zeta = 1 << 20;
-                let hi_index = (2 * i + 1) * (S / (1 << (k + 1))) + s;
-                let lo_index = (2 * i) * (S / (1 << (k + 1))) + s;
-                let inner_code = format!(
-                    "{{
-uint mult = array[{hi_index}] * {zeta};
-array[{hi_index}] = array[{lo_index}] - mult;
-array[{lo_index}] = array[{lo_index}] + mult;
-}}
-"
-                );
-                code += &inner_code;
+        if i < 2 * (V * W * B * D) {
+            if i % (1 << 6) == 0 {
+                println!("{i}: {x}");
             }
         }
     }
-    println!("{code}");
-}
-
-fn decompose_across_threads_code() {
-    let mut code = String::with_capacity(1 << 10);
-    for l in 0..(T as f32).log2() as u32 {
-        let idx = (T as f32).log2() as u32 - l - 1;
-        let mask = 1 << idx;
-        for s in 0..S {
-            for u in 0..U {
-                let index = s * U + u;
-                let zeta = 1 << 20;
-                let inner_code = format!(
-                    "
-{{
-    uint tau = t;
-    uint sigma = tau ^ {mask};
-    uint tau_coef = array[{index}];
-    if (sigma < tau)
-    {{
-        tau_coef *= {zeta};
-    }}
-    uint sigma_coef = simd_shuffle_xor(tau_coef, {mask});
-    array[{index}] = sigma < tau ? sigma_coef - tau_coef : tau_coef + sigma_coef;
-}}
-                "
-                );
-                code += &inner_code;
-            }
-        }
-    }
-    println!("{code}");
 }
 
 // for (ushort k = 0; k < ushort(log2(half(S))); k++)
@@ -463,4 +273,108 @@ fn decompose_across_threads_code() {
 //     *x = numsC[i - 64];
 // } else if 96 <= i && i < 128 {
 //     *x = numsD[i - 96];
+// }
+
+// compute correctly
+// println!("calculating CPU version");
+// let mut out = vec![0; D * G];
+// for g in 0..G {
+//     for t in 0..T {
+//         let mut array: [u32; S] = [0; S];
+//         // READING INPUT
+//         for s in 0..S {
+//             array[s] = input.as_slice()[g * D + s * (D / S) + t] as u32;
+//         }
+//         // DECOMPOSING WITHIN THREADS
+//         for k in 0..((S as f32).log2() as u32) {
+//             for i in 0..(1 << k) {
+//                 for s in 0..S / (1 << (k + 1)) {
+//                     for u in 0..U {
+//                         let hi_index =
+//                             ((2 * i + 1) * (S / (1 << (k + 1))) * U + s * U + u) as usize;
+//                         // let mult = vals[hi_index].mulm(zeta(k + 1, 2 * i), &P);
+//                         let mult = array[hi_index] * (1 << 20);
+//                         let lo_index =
+//                             ((2 * i) * (S / (1 << (k + 1))) * U + s * U + u) as usize;
+//                         // array[hi_index] = array[lo_index].subm(mult, &P);
+//                         // array[lo_index] = array[lo_index].addm(mult, &P);
+//                         array[hi_index] = array[lo_index] - mult;
+//                         array[lo_index] = array[lo_index] + mult;
+//                         // let hi_index = (2 * i + 1) * (S / (1 << (k + 1))) + s;
+//                         // let lo_index = (2 * i) * (S / (1 << (k + 1))) + s;
+//                         // let mult = vals[hi_index] * (1 << 20);
+//                         // vals[hi_index] = vals[lo_index] + mult;
+//                         // vals[lo_index] = vals[lo_index] - mult;
+//                     }
+//                 }
+//             }
+//         }
+//         // DECOMPOSING ACROSS THREADS
+//         for l in 0..((T as f32).log2() as u32) {
+//             for t in 0..T / (1 << l + 1) {
+//                 for r in 0..(1 << l) {
+//                     let lo_index = (2 * r) * T / (1 << l + 1) + t;
+//                     let hi_index = (2 * r + 1) * T / (1 << l + 1) + t;
+//                     // println!("threads: {lo_index}, {hi_index}");
+//                     // let idx = Self::logT() - l - 1;
+//                     // let mask = 1 << idx;
+//                     // let sigma = tau ^ mask;
+//                     for s in 0..S {
+//                         let i = s * (1 << l) + r;
+//                         let zeta = 1 << 20; //Self::zeta(Self::logS() + l + 2, 2 * i);
+//                         for u in 0..U {
+//                             let lo_coef = array[(lo_index * S * U + s * U + u) as usize];
+//                             let hi_coef = array[(hi_index * S * U + s * U + u) as usize];
+//                             let mult = hi_coef * zeta;
+//                             array[(hi_index * S * U + s * U + u) as usize] =
+//                                 lo_coef - mult;
+//                             array[(lo_index * S * U + s * U + u) as usize] =
+//                                 lo_coef + mult;
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//         // WRITING OUTPUT
+//         for s in 0..S {
+//             out[g * D + s * (D / S) + t] = vals[s];
+//         }
+//     }
+// }
+// // compute expected output
+// println!("calculating correct");
+// let mut correct = vec![0; D * G];
+// for g in 0..G {
+//     for j in 0..D {
+//         correct[g * D + j] = input.as_slice()[g * D + j] as u32;
+//     }
+//     for k in 0..((S as f32).log2() as u32) {
+//         for j in 0..(1 << k) {
+//             for l in 0..D / (1 << (k + 1)) {
+//                 let hi_index = g * D + j * (D / (1 << k)) + D / (1 << (k + 1)) + l;
+//                 let lo_index = g * D + j * (D / (1 << k)) + l;
+//                 // let mult = ref_in[hi_index].mulm(1 << 20, &P);
+//                 // ref_out[hi_index] = ref_in[lo_index].addm(mult, &P);
+//                 // ref_out[lo_index] = ref_in[lo_index].subm(mult, &P);
+//                 let mult = correct[hi_index] * (1 << 20);
+//                 correct[hi_index] = correct[lo_index] + mult;
+//                 correct[lo_index] = correct[lo_index] - mult;
+//                 // println!("hi: {}, lo: {}", correct[hi_index], correct[lo_index]);
+//                 // println!(
+//                 //     "hi_val: {}, lo_val: {}, mult: {}, lo: {}",
+//                 //     ref_in[hi_index], ref_in[lo_index], mult, ref_out[lo_index]
+//                 // )
+//             }
+//         }
+//     }
+// }
+// // outputs
+// println!("comparing outputs");
+// for g in 0..G {
+//     for j in 0..D {
+//         println!("{}: {}", g * D + j, output[g * D + j],);
+//         // println!("C: {}: {}", g * G + j, correct[g * G + j]);
+//         // assert_eq!(correct[g * D + j], out[g * D + j]);
+//         // assert_eq!(output.as_slice()[g * D + j], out[g * D + j]);
+//     }
 // }
