@@ -1,213 +1,420 @@
-#include <metal_stdlib>
-#include <metal_atomic>
-#include "fp.h"
-using namespace metal;
+// #include <metal_stdlib>
+// #include <metal_atomic>
+#include "arithmetic.h"
 
-// uint addresss(ushort b, ushort v, ushort w, ushort s, ushort t, ushort u)
-// {
-//     return ((((b * V + v) * W + w) * S + s) * T + t) * U + u;
-// }
+struct Params
+{
+    const uint E;
+    const ushort F;
+    const ushort G;
+    const ushort X;
+    const ushort ORD;
+};
 
-template <ushort S, ushort U>
-void Kappa(
+uint get_index(
+    uint e,
+    uint F, uint f,
+    ushort G, ushort g,
+    ushort S, ushort s,
+    ushort T, ushort tau,
+    ushort U, ushort u)
+{
+    return ((((e * F + f) * G + g) * S + s) * T + tau) * U + u;
+}
+
+ushort log(ushort val)
+{
+    return ushort(metal::log2(half(val)));
+}
+
+template <ushort S, ushort T, ushort U>
+void Algorithm_1(
     device uchar *input,
     threadgroup uint *shared,
     device uint *output,
-    ushort V,
-    ushort W,
-    ushort B,
-    ushort t,
-    ushort w,
-    ushort b)
+    const uint e,
+    const ushort w_global,
+    const ushort t_local,
+    constant const Params &params)
 {
+    const ushort F = params.F;
+    const ushort G = params.G;
 
-    ushort T = 32;
-    ushort ORD = 8;
-    ushort logW = ushort(log2(half(W)));
-    ushort logS = ushort(log2(half(S)));
-    ushort logT = uint(log2(half(T)));
-    ushort logU = uint(log2(half(U)));
-    ushort logOrd = uint(log2(half(ORD)));
+    ushort W = T / params.X;
     uint array[S * U];
-    uint acc[S * U] = {0};
-    uint mult_val = 2091658123;
-    uint add_val = 1523138830;
-    uint state = 1;
 
-    uint global_index_prefix = ((((0 * W + w) * B + b) * S + 0) * T + t) * U + 0;
-    for (ushort v = 0; v < V; v++)
+    ushort w = w_global & (W - 1);
+    ushort tau = w * 32 + t_local;
+    ushort g = w_global / W;
+    uint global_read_index_prefix = get_index(e, F, 0, G, g, S, 0, T, tau, U, 0);
+
+    for (ushort f = 0; f < F; f++)
     {
-        // READING INPUT
-        uint local_index_prefix = global_index_prefix + ((((v * W + 0) * B + 0) * S + 0) * T + 0) * U + 0;
+        // READ INPUT
         for (ushort s = 0; s < S; s++)
         {
             for (ushort u = 0; u < U; u++)
             {
-                uint local_index = local_index_prefix + ((((0 * W + 0) * B + 0) * S + s) * T + 0) * U + u;
-                array[s * U + u] = uint(input[local_index]);
+                uint global_read_index = global_read_index_prefix + get_index(0, F, 0, G, 0, S, s, T, 0, U, u);
+                array[s * U + u] = uint(input[global_read_index]);
             }
         }
-        // DECOMPOSING WITHIN THREADS
-        for (ushort k = 0; k < logS; k++)
+        global_read_index_prefix += get_index(0, F, 1, G, 0, S, 0, T, 0, U, 0);
+
+        // DECOMPOSE WITHIN THREADS
+        for (ushort k = 0; k < log(S); k++)
         {
+            ushort s_bound = (S / (1 << (k + 1)));
             for (ushort i = 0; i < (1 << k); i++)
             {
-                for (ushort s = 0; s < S / (1 << (k + 1)); s++)
+                uint zeta = zetas((1 << k) - 1 + i);
+                ushort lo_index_prefix = (2 * i) * s_bound;
+                ushort hi_index_prefix = lo_index_prefix + s_bound;
+                for (ushort s = 0; s < s_bound; s++)
                 {
                     for (ushort u = 0; u < U; u++)
                     {
-                        ushort hi_index = (2 * i + 1) * (S / (1 << (k + 1))) * U + s * U + u;
-                        uint zeta = get_zeta(k + 2, i);
+                        ushort hi_index = (hi_index_prefix + s) * U + u;
                         uint mult = mul(array[hi_index], zeta);
-                        ushort lo_index = (2 * i) * (S / (1 << (k + 1))) * U + s * U + u;
+                        ushort lo_index = (lo_index_prefix + s) * U + u;
                         array[hi_index] = sub(array[lo_index], mult);
                         array[lo_index] = add(array[lo_index], mult);
-                        // ushort hi_index = (2 * i + 1) * (S / (1 << (k + 1))) * U + s * U + u;
-                        // uint zeta = get_zeta(k + 2, i);
-                        // uint mult = mul(array[hi_index][u], zeta);
-                        // ushort lo_index = (2 * i) * (S / (1 << (k + 1))) * U + s * U + u;
-                        // array[hi_index][u] = sub(array[lo_index][u], mult);
-                        // array[lo_index][u] = add(array[lo_index][u], mult);
                     }
                 }
             }
         }
-        // DECOMPOSING ACROSS THREADS
-        for (ushort l = 0; l < logT + logU - logOrd; l++)
+
+        // DECOMPOSE ACROSS WARPS
+        ushort tau_warp = w;
+        for (ushort l = 0; l < log(W); l++)
         {
-            ushort idx = logT - l - 1;
+            ushort idx = log(W) - l - 1;
             ushort mask = 1 << idx;
-            ushort tau = t;
-            ushort sigma = tau ^ mask;
-            ushort r = tau >> (logT - l);
+            ushort sigma_warp = tau_warp ^ mask;
+            bool upper = sigma_warp < tau_warp;
+            ushort r = tau >> (log(T) - l);
             for (ushort s = 0; s < S; s++)
             {
                 uint i = s * (1 << l) + r;
-                uint zeta = get_zeta(logS + l + 2, i);
-                for (uint u = 0; u < U; u++)
+                uint mult = upper ? zetas((1 << (log(S) + l)) - 1 + i) : 1;
+                for (ushort u = 0; u < U; u++)
                 {
-                    uint tau_coef = array[s * U + u];
-                    if (sigma < tau)
-                    {
-                        // for (uint u = 0; u < U; u++)
-                        // {
-                        tau_coef = mul(tau_coef, zeta);
-                        // }
-                    }
-                    uint sigma_coef = simd_shuffle_xor(tau_coef, mask);
-                    // for (uint u = 0; u < U; u++)
-                    // {
-                    array[s * U + u] = sigma < tau ? sub(sigma_coef, tau_coef) : add(tau_coef, sigma_coef);
+                    ushort local_index = s * U + u;
+                    uint tau_coef = mul(array[local_index], mult);
+                    array[local_index] = tau_coef;
+                    uint tau_index = g * S * T * U + (s * T + tau) * U + u;
+                    shared[tau_index] = tau_coef;
+                }
+            }
+            threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+            for (ushort s = 0; s < S; s++)
+            {
+                for (ushort u = 0; u < U; u++)
+                {
+                    ushort local_index = s * U + u;
+                    uint sigma_index = g * S * T * U + (s * T + (sigma_warp * 32 + t_local)) * U + u;
+                    uint sigma_coef = shared[sigma_index];
+                    uint tau_coef = array[local_index];
+                    array[local_index] = upper ? sub(sigma_coef, tau_coef) : add(tau_coef, sigma_coef);
                 }
             }
         }
 
-        // MULTIPLYING AND ACCUMULATING WITHIN WARPS
-        // SCHOOLBOOK
+        // DECOMPOSE ACROSS THREADS
+        for (ushort l = log(W); l < log(T) + log(U) - log(params.ORD); l++)
+        {
+            ushort idx = log(T) - l - 1;
+            ushort mask = 1 << idx;
+            ushort sigma = tau ^ mask;
+            bool upper = sigma < tau;
+            ushort r = tau >> (log(T) - l);
+            for (ushort s = 0; s < S; s++)
+            {
+                uint i = s * (1 << l) + r;
+                uint mult = upper ? zetas((1 << (log(S) + l)) - 1 + i) : 1;
+                for (ushort u = 0; u < U; u++)
+                {
+                    ushort local_index = s * U + u;
+                    uint tau_coef = mul(array[local_index], mult);
+                    uint sigma_coef = metal::simd_shuffle_xor(tau_coef, mask);
+                    array[local_index] = upper ? sub(sigma_coef, tau_coef) : add(tau_coef, sigma_coef);
+                }
+            }
+        }
+
+        // // MULTIPLY
+        // {
+        //     uint mult_val = 2091658123;
+        //     uint add_val = 1523138830;
+        //     uint state = 1;
+        //     uint acc[S];
+
+        //     for (ushort s = 0; s < S; s++)
+        //     {
+        //         // uint zeta = get_zeta(logS + logT + logU - logORD - 1 + 2, s / 2);
+        //         for (ushort u0 = 0; u0 < U; u0++)
+        //         {
+        //             if (u0 > 0)
+        //             {
+        //                 array[s * U + (U - u0)] = mul(array[s * U + (U - u0)], zeta);
+        //             }
+        //             state = add(mul(state, mult_val), add_val);
+        //             for (ushort u1 = 0; u1 < U; u1++)
+        //             {
+        //                 if (u0 == 0)
+        //                 {
+        //                     acc[s * U + u1] = mul(array[s * U + u1], state);
+        //                 }
+        //                 else
+        //                 {
+        //                     acc[s * U + u1] = add(acc[s * U + u1], mul(array[(s * U + u1 + (ORD - u0)) % ORD], state));
+        //                 }
+        //             }
+        //         }
+        //         for (ushort u = 0; u < U; u++)
+        //         {
+        //             output[global_index_prefix + s * T * U + u] = acc[s * U + u];
+        //         }
+        //     }
+        // }
+
+        // WRITE TO GLOBAL MEMORY
+        uint global_write_index_prefix = get_index(e, F, f, G, g, S, 0, T, tau, U, 0);
         for (ushort s = 0; s < S; s++)
         {
-            uint zeta = get_zeta(logS + logT + logU - logOrd - 1 + 2, s / 2);
-            for (ushort u0 = 0; u0 < U; u0++)
+            for (ushort u = 0; u < U; u++)
             {
-                if (u0 > 0)
-                {
-                    array[s * U + (U - u0)] = mul(array[s * U + (U - u0)], zeta);
-                }
-                state = add(mul(state, mult_val), add_val);
-                for (ushort u1 = 0; u1 < U; u1++)
-                {
-                    acc[s * U + u1] = add(acc[s * U + u1], mul(array[(s * U + u1 + (ORD - u0)) % ORD], state));
-                }
+                uint global_write_index = global_write_index_prefix + get_index(0, F, 0, G, 0, S, s, T, 0, U, u);
+                output[global_write_index] = array[s * U + u];
             }
-        }
-
-        // // KARATSUBA
-        // // uint2 seed = seeds[w * T + t];
-        // uint state = 1;
-        // uint acc[S * U];
-        // uint aux[U];
-        // for (uchar u = 0; u < U; u++)
-        // {
-        //     aux[u] = 0;
-        // }
-        // for (ushort s = 0; s < S; s++)
-        // {
-        //     // generate s seed values
-        //     uint constants[U];
-        //     for (uchar u = 0; u < U; u++)
-        //     {
-        //         constants[u] = generate(seed, state);
-        //     }
-        //     uint zeta = get_zeta(logS + logT + logU - logORD - 1 + 2, s / 2);
-        // }
-    }
-
-    // // *** SHARED MEMORY ***
-    // uint r = 1;
-    // uint U2 = U;
-    // uint S2 = S * U / U2;
-    // for (ushort m = 0; m * r < logW; m++)
-    // {
-    //     // WRITE
-    //     uint group_size = W / (1 << (m + 1) * r);
-    //     uint group = w >> logW - (m + 1) * r;
-    //     if (group != 0)
-    //     {
-    //         uint element_start_index = w * S * T * U;
-    //         for (ushort s = 0; s < S2; s++)
-    //         {
-    //             for (ushort u = 0; u < U2; u++)
-    //             {
-    //                 uint shared_index = element_start_index + s * T * U2 + t * U2 + u;
-    //                 shared[shared_index] = acc[s * U + u];
-    //             }
-    //         }
-    //     }
-    //     // SYNC
-    //     // threadgroup_barrier(mem_flags::mem_none);
-    //     if (group != 0)
-    //     {
-    //         return;
-    //     }
-    //     // READ
-    //     for (ushort e = 1; e < 1 << r; e++)
-    //     {
-    //         uint element_start_index = (e * group_size + w) * S * T * U;
-    //         for (ushort s = 0; s < S2; s++)
-    //         {
-    //             for (ushort u = 0; u < U2; u++)
-    //             {
-    //                 uint coef_index = element_start_index + s * T * U2 + t * U2 + u;
-    //                 acc[s * U + u] = add(acc[s * U + u], shared[coef_index]);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // *** SIMD ***
-
-    // WRITING TO GLOBAL MEMORY
-    for (ushort s = 0; s < S; s++)
-    {
-        for (ushort u = 0; u < U; u++)
-        {
-            uint index_prefix = ((((0 * W + w) * B + b) * S + s) * T + t) * U + u;
-            // uint shared_index = w * (S * T * U) + s * T * U + t * U + u;
-            output[index_prefix] = acc[s * U + u];
         }
     }
 }
 
-kernel void go(
+template <ushort S, ushort T, ushort T_J, ushort J, ushort K>
+void Algorithm_2(
     device uchar *input,
     threadgroup uint *shared,
     device uint *output,
-    constant ushort &V,
-    constant ushort &W,
-    constant ushort &B,
-    ushort t [[thread_index_in_simdgroup]],
-    ushort w [[simdgroup_index_in_threadgroup]],
-    ushort b [[threadgroup_position_in_grid]])
+    const uint e,
+    const ushort w_global,
+    const ushort t_local,
+    constant const Params &params)
 {
-    Kappa<1 << 1, 1 << 1>(input, shared, output, V, W, B, t, w, b);
+    const ushort F = params.F;
+    const ushort G = params.G;
+
+    uint array[S];
+    uint acc[S] = {0};
+    const ushort W = T / params.X;
+    const ushort w = w_global & (W - 1);
+    const ushort tau = w * params.X + t_local;
+    const ushort g = w_global / W;
+    uint global_read_index_prefix = get_index(e, F, 0, G, g, S, 0, T, tau, 1, 0);
+
+    for (ushort f = 0; f < F; f++)
+    {
+
+        // READ INPUT
+        for (ushort s = 0; s < S; s++)
+        {
+            uint global_read_index = global_read_index_prefix + get_index(0, F, 0, G, 0, S, s, T, 0, 1, 0);
+            array[s] = uint(input[global_read_index]);
+        }
+        global_read_index_prefix += get_index(0, F, 1, G, 0, S, 0, T, 0, 1, 0);
+
+        // DECOMPOSE WITH CHAIN
+        ushort D = S * T;
+        ushort Dj = D;
+        ushort Tj = T;
+        ushort r = 0;
+        ushort i = 0;
+        ushort t = tau;
+
+        for (ushort j = 0; j <= J; j++)
+        {
+            if (0 < j)
+            {
+                Dj /= S;
+                Tj /= S;
+                i = (tau / Tj) & (S - 1);
+                t &= (Tj - 1);
+
+                if (params.X < Dj)
+                // TRANSPOSE ACROSS WARPS
+                {
+                    for (ushort s = 0; s < S; s++)
+                    {
+                        if (s == i)
+                        {
+                            continue;
+                        }
+                        ushort index = g * D + (r * S + s) * Dj + i * Tj + t;
+                        shared[index] = array[s];
+                    }
+                    threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+                    for (ushort s = 0; s < S; s++)
+                    {
+                        if (s == i)
+                        {
+                            continue;
+                        }
+                        ushort index = g * D + (r * S + i) * Dj + s * Tj + t;
+                        array[s] = shared[index];
+                    }
+                }
+                else
+                // TRANSPOSE ACROSS THREADS
+                {
+                    for (ushort s = 0; s < S; s++)
+                    {
+                        ushort mask = s * Tj;
+                        ushort index = s ^ i;
+                        array[index] = metal::simd_shuffle_xor(array[index], mask);
+                        // ushort sigma = (r * S[j] + s_iter) * T[j] + t;
+                        // array[index] = metal::simd_shuffle(array[index], sigma);
+                    }
+                }
+            }
+
+            // DECOMPOSE WITHIN THREADS
+            ushort r_new = r * S + i;
+            ushort k_bound = j < J ? log(S) : K;
+            for (ushort k = 0; k < k_bound; k++)
+            {
+                ushort s_bound = (S / (1 << (k + 1)));
+                for (ushort i_new = 0; i_new < (1 << k); i_new++)
+                {
+                    ushort component_index = r_new * (1 << k) + i_new;
+                    uint zeta = zetas((1 << (j * log(S) + k)) - 1 + component_index);
+                    ushort lo_index_prefix = (2 * i_new) * s_bound;
+                    ushort hi_index_prefix = lo_index_prefix + s_bound;
+                    for (ushort s = 0; s < s_bound; s++)
+                    {
+                        ushort hi_index = hi_index_prefix + s;
+                        uint mult = mul(array[hi_index], zeta);
+                        ushort lo_index = lo_index_prefix + s;
+                        array[hi_index] = sub(array[lo_index], mult);
+                        array[lo_index] = add(array[lo_index], mult);
+                    }
+                }
+            }
+
+            r = tau / Tj;
+        }
+
+        uint tmp[S] = {0};
+        // COLLECT IRREDUCIBLES INTO THREADS
+        for (ushort mask = 0; mask < Tj; mask++)
+        {
+            for (ushort v = 0; v < S / Tj; v++)
+            {
+                ushort other = t ^ mask;
+                ushort index = other * (S / Tj) + v;
+                tmp[index] = metal::simd_shuffle_xor(array[index], mask);
+            }
+        }
+        for (ushort mask = 0; mask < Tj; mask++)
+        {
+            for (ushort v = 0; v < S / Tj; v++)
+            {
+                ushort other = t ^ mask;
+                ushort new_index = v * Tj + other;
+                ushort old_index = other * (S / Tj) + v;
+                array[old_index] = tmp[new_index];
+            }
+        }
+
+        // SCHOOLBOOK
+        {
+            uint mult_val = 2091658123;
+            uint add_val = 1523138830;
+            uint state = 1;
+            // uint minors[T_J * S / (1 << K)] = {3614796953, 1208427060, 1889015752, 3198863462};
+            // {1, 0, 0, 0};
+
+            ushort s_bound = S / (1 << K);
+
+            for (ushort u = 0; u < (1 << K) / Tj; u++)
+            {
+                uint acc[T_J * S / (1 << K)] = {0};
+                // zeta
+                ushort component_index = (r * Tj + t) * ((1 << K) / Tj) + u;
+                ushort zeta_index = (1 << ((J - 1) * log(S) + K + 1)) - 1 + component_index / 2;
+                uint zeta = zetas(zeta_index);
+                if (component_index % 2)
+                {
+                    zeta = sub(0, zeta);
+                }
+                // inner
+                for (ushort s1 = 0; s1 < s_bound; s1++)
+                {
+                    for (ushort t1 = 0; t1 < Tj; t1++)
+                    {
+                        ushort coef_index = s1 * Tj + t1;
+                        if (coef_index > 0)
+                        {
+                            ushort new_bottom_index = (Tj - t1) * (S / Tj) + u * s_bound + (S / (1 << K) - (s1 + 1));
+                            array[new_bottom_index] = mul(array[new_bottom_index], zeta);
+                        }
+                        state = add(mul(state, mult_val), add_val);
+
+                        for (ushort s2 = 0; s2 < s_bound; s2++)
+                        {
+                            for (ushort t2 = 0; t2 < Tj; t2++)
+                            {
+                                ushort array_index = t2 * (S / Tj) + u * s_bound + s2;
+                                ushort acc_index = t2 * s_bound + s2;
+                                ushort off_index = (acc_index + coef_index) % S;
+                                acc[off_index] = add(acc[off_index], mul(array[array_index], state));
+                            }
+                        }
+                    }
+                }
+
+                for (ushort s2 = 0; s2 < s_bound; s2++)
+                {
+                    for (ushort t2 = 0; t2 < Tj; t2++)
+                    {
+                        ushort array_index = t2 * (S / Tj) + u * s_bound + s2;
+                        ushort acc_index = t2 * s_bound + s2;
+                        array[array_index] = acc[acc_index];
+                    }
+                }
+            }
+        }
+
+        // WRITE OUTPUT
+        uint global_write_index_prefix = get_index(e, F, f, G, g, S, 0, T, 0, 1, 0);
+        ushort tau_lower = tau & (Tj - 1);
+        for (ushort s = 0; s < S; s++)
+        {
+            // uint index = global_write_index_prefix + r * Dj + s * Tj + tau_lower;
+            uint index = (r * Tj + tau_lower) * S + s;
+            output[index] = array[s];
+        }
+    }
+}
+
+kernel void
+go(
+    device uchar *input,
+    device uint *output,
+    constant const Params &params,
+    threadgroup uint *shared,
+    const uint e [[threadgroup_position_in_grid]],
+    const ushort w_global [[simdgroup_index_in_threadgroup]],
+    const ushort t_local [[thread_index_in_simdgroup]])
+{
+    ushort algo = 2;
+    if (algo == 1)
+    {
+        // template <S, T, U>
+        Algorithm_1<(1 << 2), (1 << 6), (1 << 0)>(input, shared, output, e, w_global, t_local, params);
+    }
+    else if (algo == 2)
+    {
+        // template <S, T_0, T_J = T_0/S^J, J, K>
+        Algorithm_2<(1 << 2), (1 << 6), (1 << 2), 2, 2>(input, shared, output, e, w_global, t_local, params);
+    }
 }

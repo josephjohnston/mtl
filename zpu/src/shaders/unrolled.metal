@@ -1,150 +1,217 @@
 
-#include "fp.h"
+#include "arithmetic.h"
 
 kernel void go(
-    device uchar2 *input,
-    device uint2 *output,
-    ushort t [[thread_index_in_simdgroup]],
-    ushort w [[simdgroup_index_in_threadgroup]],
-    ushort b [[threadgroup_position_in_grid]])
+    device uchar *input,
+    threadgroup uint *shared,
+    device uint *output,
+    uint e [[threadgroup_position_in_grid]],
+    ushort w_global [[simdgroup_index_in_threadgroup]],
+    ushort t_local [[thread_index_in_simdgroup]])
 {
-    uint2 array[8];
-    uint in_global_index_prefix = b * 8192 + w * 256 + t * 1;
-    array[0] = uint2(input[in_global_index_prefix + 0]);
-    array[1] = uint2(input[in_global_index_prefix + 32]);
-    array[2] = uint2(input[in_global_index_prefix + 64]);
-    array[3] = uint2(input[in_global_index_prefix + 96]);
-    array[4] = uint2(input[in_global_index_prefix + 128]);
-    array[5] = uint2(input[in_global_index_prefix + 160]);
-    array[6] = uint2(input[in_global_index_prefix + 192]);
-    array[7] = uint2(input[in_global_index_prefix + 224]);
+    uint array[4];
+    ushort w = w_global & ((1 << 1) - 1);
+    ushort tau = w * 32 + t_local;
+    ushort g = w_global / 2;
+    uint global_read_index_prefix = e * 256 + 0 * 256 + g * 256 + 0 * 64 + tau * 1 + 0 * 1;
+    
+    for (ushort f = 0; f < 1; f++)
     {
-        uint mult = mul(array[8],1048576);
-        array[8] = sub(array[0],mult);
-        array[0] = add(array[0],mult);
+        
+        // READ INPUT
+        for (ushort s = 0; s < 4; s++)
+        {
+            for (ushort u = 0; u < 1; u++)
+            {
+                uint global_read_index = global_read_index_prefix + 0 * 256 + 0 * 256 + 0 * 256 + s * 64 + 0 * 1 + u * 1;
+                array[s * 1 + u] = uint(input[global_read_index]);
+            }
+        }
+        global_read_index_prefix += 0 * 256 + 1 * 256 + 0 * 256 + 0 * 64 + 0 * 1 + 0 * 1;
+        
+        // DECOMPOSE WITH CHAIN
+        ushort Dj = 256;
+        ushort Tj = 64;
+        ushort r = 0;
+        ushort i = 0;
+        ushort t = tau;
+        
+        // DECOMPOSE WITHIN THREADS 0
+        for (ushort k = 0; k < 2; k++)
+        {
+            ushort s_bound = 4 / (1 << (k + 1));
+            for (ushort i = 0; i < (1 << k); i++)
+            {
+                uint zeta = zetas((1 << k) - 1 + i);
+                ushort lo_index_prefix = (2 * i) * s_bound;
+                ushort hi_index_prefix = lo_index_prefix + s_bound;
+                for (ushort s = 0; s < s_bound; s++)
+                {
+                    {
+                        ushort hi_index = (hi_index_prefix + s) * 1 + 0;
+                        uint mult = mul(array[hi_index], zeta);
+                        ushort lo_index = (lo_index_prefix + s) * 1 + 0;
+                        array[hi_index] = sub(array[lo_index], mult);
+                        array[lo_index] = add(array[lo_index], mult);
+                    }
+                }
+            }
+        }
+        for (ushort j = 1; j <= 2; j++)
+        {
+            Dj /= 4;
+            Tj /= 4;
+            i = (tau / Tj) & (4 - 1);
+            t = tau & (Tj - 1);
+            
+            if (32 < Dj)
+            // TRANSPOSE ACROSS WARPS
+            {
+                for (ushort s = 0; s < 4; s++)
+                {
+                    ushort index = g * 256 + (r * 4 + s) * Dj + i * Tj + t;
+                    shared[index] = array[s];
+                }
+                threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+                for (ushort s = 0; s < 4; s++)
+                {
+                    ushort index = g * 256 + (r * 4 + i) * Dj + s * Tj + t;
+                    array[s] = shared[index];
+                }
+            }
+            else
+            // TRANSPOSE ACROSS THREADS
+            {
+                for (ushort s = 0; s < 4; s++)
+                {
+                    ushort mask = s * Tj;
+                    ushort index = s ^ i;
+                    array[index] = metal::simd_shuffle_xor(array[index], mask);
+                }
+            }
+            
+            // DECOMPOSE WITHIN THREADS j
+            ushort r_new = r * 4 + i;
+            ushort k_bound = j < 2 ? 2 : 2;
+            for (ushort k = 0; k < k_bound; k++)
+            {
+                ushort s_bound = 4 / (1 << (k + 1));
+                for (ushort i_new = 0; i_new < (1 << k); i_new++)
+                {
+                    ushort component_index = r_new * (1 << k) + i_new;
+                    uint zeta = zetas((1 << (j * 2 + k)) - 1 + component_index);
+                    ushort lo_index_prefix = (2 * i_new) * s_bound;
+                    ushort hi_index_prefix = lo_index_prefix + s_bound;
+                    for (ushort s = 0; s < s_bound; s++)
+                    {
+                        ushort hi_index = hi_index_prefix + s;
+                        uint mult = mul(array[hi_index], zeta);
+                        ushort lo_index = lo_index_prefix + s;
+                        array[hi_index] = sub(array[lo_index], mult);
+                        array[lo_index] = add(array[lo_index], mult);
+                    }
+                }
+            }
+            
+            r = tau / Tj;
+        }
+        
+        // COLLECT IRREDUCIBLES INTO THREADS
+        uint tmp[4] = {0};
+        for (ushort mask = 0; mask < 4; mask++)
+        {
+            for (ushort v = 0; v < 4 / 4; v++)
+            {
+                ushort other = t ^ mask;
+                ushort index = other * (4 / 4) + v;
+                tmp[index] = metal::simd_shuffle_xor(array[index], mask);
+            }
+        }
+        for (ushort mask = 0; mask < Tj; mask++)
+        {
+            for (ushort v = 0; v < 4 / Tj; v++)
+            {
+                ushort other = t ^ mask;
+                ushort new_index = v * Tj + other;
+                ushort old_index = other * (4 / Tj) + v;
+                array[old_index] = tmp[new_index];
+            }
+        }
+        ushort u = 0;
+        uint middle[4] = {0};
+        uint minors[4] = {1, 0, 0, 0};
+        ushort component_index = (r * Tj + t) * ((1 << 2) / Tj) + u;
+        ushort zeta_index = (1 << ((2 - 1) * 2 + 2 + 1)) - 1 + component_index / 2;
+        uint zeta = zetas(zeta_index);
+        if (component_index % 2) { zeta = sub(0, zeta); }
+        // Theta = 4
+        middle[(4 - 2) + 0] = array[0 + 4 / 2 + 0];
+        middle[(4 - 2) + 1] = array[0 + 4 / 2 + 1];
+        {
+            // Theta = 2
+            middle[(2 - 2) + 0] = array[0 + 2 / 2 + 0];
+            {
+                // Theta = 1
+                array[0] = mul(array[0], minors[0]);
+                // Theta = 1
+                middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 2 / 2]);
+            }
+            array[0 + 2 / 2 + 0] = array[0 + 2 / 2 + 0] + array[0 + 0];
+            minors[0 + 2 / 2 + 0] = minors[0 + 2 / 2 + 0] + minors[0 + 0];
+            // Theta = 1
+            array[0 + 2 / 2] = mul(array[0 + 2 / 2], minors[0 + 2 / 2]);
+            array[0 + 2 / 2 + 0] = sub(array[0 + 2 / 2 + 0], middle[(2 - 2) + 0]);
+            array[0 + 2 / 2 + 0] = sub(array[0 + 2 / 2 + 0], array[0 + 0]);
+            array[0 + 0] = add(array[0 + 0], mul(middle[(2 - 2) + 0], zeta));
+            // Theta = 2
+            middle[(2 - 2) + 0] = middle[(4 - 2) + 2 / 2 + 0];
+            {
+                // Theta = 1
+                middle[(4 - 2)] = mul(middle[(4 - 2)], minors[0 + 4 / 2]);
+                // Theta = 1
+                middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 4 / 2 + 2 / 2]);
+            }
+            middle[(4 - 2) + 2 / 2 + 0] = middle[(4 - 2) + 2 / 2 + 0] + middle[(4 - 2) + 0];
+            minors[0 + 4 / 2 + 2 / 2 + 0] = minors[0 + 4 / 2 + 2 / 2 + 0] + minors[0 + 4 / 2 + 0];
+            // Theta = 1
+            middle[(4 - 2) + 2 / 2] = mul(middle[(4 - 2) + 2 / 2], minors[0 + 4 / 2 + 2 / 2]);
+            middle[(4 - 2) + 2 / 2 + 0] = sub(middle[(4 - 2) + 2 / 2 + 0], middle[(2 - 2) + 0]);
+            middle[(4 - 2) + 2 / 2 + 0] = sub(middle[(4 - 2) + 2 / 2 + 0], middle[(4 - 2) + 0]);
+            middle[(4 - 2) + 0] = add(middle[(4 - 2) + 0], mul(middle[(2 - 2) + 0], zeta));
+        }
+        array[0 + 4 / 2 + 0] = array[0 + 4 / 2 + 0] + array[0 + 0];
+        minors[0 + 4 / 2 + 0] = minors[0 + 4 / 2 + 0] + minors[0 + 0];
+        array[0 + 4 / 2 + 1] = array[0 + 4 / 2 + 1] + array[0 + 1];
+        minors[0 + 4 / 2 + 1] = minors[0 + 4 / 2 + 1] + minors[0 + 1];
+        // Theta = 2
+        middle[(2 - 2) + 0] = array[0 + 4 / 2 + 2 / 2 + 0];
+        {
+            // Theta = 1
+            array[0 + 4 / 2] = mul(array[0 + 4 / 2], minors[0 + 4 / 2]);
+            // Theta = 1
+            middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 4 / 2 + 2 / 2]);
+        }
+        array[0 + 4 / 2 + 2 / 2 + 0] = array[0 + 4 / 2 + 2 / 2 + 0] + array[0 + 4 / 2 + 0];
+        minors[0 + 4 / 2 + 2 / 2 + 0] = minors[0 + 4 / 2 + 2 / 2 + 0] + minors[0 + 4 / 2 + 0];
+        // Theta = 1
+        array[0 + 4 / 2 + 2 / 2] = mul(array[0 + 4 / 2 + 2 / 2], minors[0 + 4 / 2 + 2 / 2]);
+        array[0 + 4 / 2 + 2 / 2 + 0] = sub(array[0 + 4 / 2 + 2 / 2 + 0], middle[(2 - 2) + 0]);
+        array[0 + 4 / 2 + 2 / 2 + 0] = sub(array[0 + 4 / 2 + 2 / 2 + 0], array[0 + 4 / 2 + 0]);
+        array[0 + 4 / 2 + 0] = add(array[0 + 4 / 2 + 0], mul(middle[(2 - 2) + 0], zeta));
+        array[0 + 4 / 2 + 0] = sub(array[0 + 4 / 2 + 0], middle[(4 - 2) + 0]);
+        array[0 + 4 / 2 + 0] = sub(array[0 + 4 / 2 + 0], array[0 + 0]);
+        array[0 + 4 / 2 + 1] = sub(array[0 + 4 / 2 + 1], middle[(4 - 2) + 1]);
+        array[0 + 4 / 2 + 1] = sub(array[0 + 4 / 2 + 1], array[0 + 1]);
+        array[0 + 0] = add(array[0 + 0], mul(middle[(4 - 2) + 0], zeta));
+        array[0 + 1] = add(array[0 + 1], mul(middle[(4 - 2) + 1], zeta));
+        
+        // WRITE OUTPUT
+        uint global_write_index_prefix = e * 256 + 0 * 256 + g * 256 + 0 * 64 + 0 * 1 + 0 * 1;
+        ushort tau_lower = tau & (Tj - 1);
+        for (ushort s = 0; s < 4; s++)
+        {
+            uint index = (r * Tj + tau_lower) * 4 + s;
+            output[index] = array[s];
+        }
     }
-    {
-        uint mult = mul(array[9],1048576);
-        array[9] = sub(array[1],mult);
-        array[1] = add(array[1],mult);
-    }
-    {
-        uint mult = mul(array[10],1048576);
-        array[10] = sub(array[2],mult);
-        array[2] = add(array[2],mult);
-    }
-    {
-        uint mult = mul(array[11],1048576);
-        array[11] = sub(array[3],mult);
-        array[3] = add(array[3],mult);
-    }
-    {
-        uint mult = mul(array[12],1048576);
-        array[12] = sub(array[4],mult);
-        array[4] = add(array[4],mult);
-    }
-    {
-        uint mult = mul(array[13],1048576);
-        array[13] = sub(array[5],mult);
-        array[5] = add(array[5],mult);
-    }
-    {
-        uint mult = mul(array[14],1048576);
-        array[14] = sub(array[6],mult);
-        array[6] = add(array[6],mult);
-    }
-    {
-        uint mult = mul(array[15],1048576);
-        array[15] = sub(array[7],mult);
-        array[7] = add(array[7],mult);
-    }
-    {
-        uint mult = mul(array[4],1024);
-        array[4] = sub(array[0],mult);
-        array[0] = add(array[0],mult);
-    }
-    {
-        uint mult = mul(array[5],1024);
-        array[5] = sub(array[1],mult);
-        array[1] = add(array[1],mult);
-    }
-    {
-        uint mult = mul(array[6],1024);
-        array[6] = sub(array[2],mult);
-        array[2] = add(array[2],mult);
-    }
-    {
-        uint mult = mul(array[7],1024);
-        array[7] = sub(array[3],mult);
-        array[3] = add(array[3],mult);
-    }
-    {
-        uint mult = mul(array[12],1073741824);
-        array[12] = sub(array[8],mult);
-        array[8] = add(array[8],mult);
-    }
-    {
-        uint mult = mul(array[13],1073741824);
-        array[13] = sub(array[9],mult);
-        array[9] = add(array[9],mult);
-    }
-    {
-        uint mult = mul(array[14],1073741824);
-        array[14] = sub(array[10],mult);
-        array[10] = add(array[10],mult);
-    }
-    {
-        uint mult = mul(array[15],1073741824);
-        array[15] = sub(array[11],mult);
-        array[11] = add(array[11],mult);
-    }
-    {
-        uint mult = mul(array[2],32);
-        array[2] = sub(array[0],mult);
-        array[0] = add(array[0],mult);
-    }
-    {
-        uint mult = mul(array[3],32);
-        array[3] = sub(array[1],mult);
-        array[1] = add(array[1],mult);
-    }
-    {
-        uint mult = mul(array[6],33554432);
-        array[6] = sub(array[4],mult);
-        array[4] = add(array[4],mult);
-    }
-    {
-        uint mult = mul(array[7],33554432);
-        array[7] = sub(array[5],mult);
-        array[5] = add(array[5],mult);
-    }
-    {
-        uint mult = mul(array[10],32768);
-        array[10] = sub(array[8],mult);
-        array[8] = add(array[8],mult);
-    }
-    {
-        uint mult = mul(array[11],32768);
-        array[11] = sub(array[9],mult);
-        array[9] = add(array[9],mult);
-    }
-    {
-        uint mult = mul(array[14],4144559881);
-        array[14] = sub(array[12],mult);
-        array[12] = add(array[12],mult);
-    }
-    {
-        uint mult = mul(array[15],4144559881);
-        array[15] = sub(array[13],mult);
-        array[13] = add(array[13],mult);
-    }
-    uint out_global_index_prefix = b * 8192 + w * 256 + t * 1;
-    output[out_global_index_prefix + 0] = array[0];
-    output[out_global_index_prefix + 32] = array[1];
-    output[out_global_index_prefix + 64] = array[2];
-    output[out_global_index_prefix + 96] = array[3];
-    output[out_global_index_prefix + 128] = array[4];
-    output[out_global_index_prefix + 160] = array[5];
-    output[out_global_index_prefix + 192] = array[6];
-    output[out_global_index_prefix + 224] = array[7];
 }

@@ -1013,9 +1013,164 @@ we try without execution barrier and it succeeds, then with execution barrier an
 similar question about register usage.
 
 https://developer.apple.com/forums/thread/725908
+https://zprize.hardcaml.com/ntt-overview
 
 with this unpredictability i'm realizing we may just need to do a lot less in each threadgroup, and this will require more complexity of reducing cross-thread. 
-ok, luckily now it's failing with SD=UD=1
+
+ok, we've tried reading in gen form, and it performs as expected, handling 2^15 in each block.
+we tried with decomp within threads and it fails with WD=4. we tried rolled and it doesn't fail. 
+looks like it was because i was writing inside the v loop (but with V=1 not sure how that mattered).
+
+so unrolling just a single k loop iteration causes failure. and we can't unroll i or s unless we unroll k.
+what if we expand just u?
+seems to still work with u unrolled. 
+just io can do WD=5 unrolled, only WD=4 rolled. actually it's completely determined by whether or not output is unrolled.
+yay, the rolled version in the unrolled file works. and strangely, so does it when we don't unroll either io.
+levels 0 and 1 work, levels 2 and 3 dont.
+
+
+let us now, instead of proceeding further with multiplication and warp reduction, recover the high performance we had before, i thinnk both decomposing within and across threads.
+so actually it's without P that we can get WD=4. and actually we get with no P better than expected: 
+pub const ORD: usize = 8;
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 0;
+pub const WD: usize = 4;
+pub const BD: usize = 16;
+in time 30.
+then with 
+pub const ORD: usize = 8;
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 4;
+pub const WD: usize = 4;
+pub const BD: usize = 12;
+we got time 2, too good to be true. 
+most extreme (VD=16 just keeps running)
+pub const ORD: usize = 8;
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 15;
+pub const WD: usize = 3;
+pub const BD: usize = 2;
+378 with P
+14 without P
+this seriously can't be
+
+but this is all just reduction within threads.
+lets expand. 
+first we add decomp across threads.
+rediculous, with this code we can now have WD=4 with P.
+now failing with the extreme case, suspended as for VD=16.
+in rolled form here it's taking a ton of time. testing following across all unrolling configs.
+pub const SD: usize = 2;
+pub const TD: usize = 5;
+pub const UD: usize = 3;
+pub const VD: usize = 12;
+pub const WD: usize = 3;
+pub const BD: usize = 4;
+000, 10 seconds
+100, 12.4 seconds
+010, 12 seconds
+001, 12 seconds
+110, 12.1 seconds
+011, 11.9 seconds
+101, 12.3 seconds
+111, 11.8 seconds
+looking at the code it's huge compared to decomp within threads. why? 
+do we apply log(TU)-log(Ord)=log(2^5*2^3)-log(2^3)=8-3=5 or log(T)-log(Ord)=5-3=2
+we're doing l-loop 5 times. maybe we only need 2 times.
+then inside there's the s-loop and u loop. i guess issue is that inside code is large.
+
+first of all, how many times to apply decomp?
+we can apply decomp log(TU)-log(Ord) times. but 
+let finish and edit the note.
+
+if we can't get this fast we can always take a single trip to shared mem and then reduce within threads again. 
+fuck, it took 10 seconds. i remember it taking a lot less.
+but with no P it takes only 41, I think that's about same as before a little worse. this is the old implementation, much faster. we need to adapt the new implementation. 
+
+geez, why is it so long, even when S > U?
+oh, because we apply it log(T) > log(S) times. so U doesn't matter here much. 
+but still log(T)=5. and each time we need to apply across all S and U. 
+what if we were to decrease T? say to 4? so each warp handles 2 elements?
+
+so we want to do less reduction across threads and more reduction within threads. 
+unfortuantley we have a bound on SU. the advantage of shared memory is only one trip and 
+
+what if instead of doing the reduction across threads using step with arithmetic at each, we instead take a single step and share so we can do another reduction within threads. this is instead of writing to shared mem. 
+
+maybe we don't understand i.
+i though i was the components. oh, yes it is. thank god. C_k is the entire direct product. 
+within threads we will indeed for k=log(S) have the TU blocks each of size S spread out among the threads. ... no. suppose S=2. we have to consider SU against the size of blocks at step k. at step k they are size D/2^k = STU/2^k. so if S=2 and k=1 they are size TU. or if k = log(T) they are size SU.
+the thing is C_k^(i) is a function of t and u. so why not just sum over T and U?
+
+when we break into 2^k parts, we sum of S/2^k. oh yeah. we still need to sum over all T and all U. ohh, and summing over T and U neither decrease entropy, or do they? no, cuz u and t both affect the degree. 
+so once we've reached k=log(S) we've got S blocks, each thread holds S U lbocks. each U block holds U consecutive values of a block. all S blocks are represented across the S U blocks a thread.
+
+suppose we set U=1. then we could try S=5. the 2 rounds of T reduction. but then 
+we need to end up with an entire block in each thread. a block will be size 8 or 4. 
+we got like the same performance for different U. maybe because in either case T*U contiguous values are being read. so suppose U=1.
+then we'll do log(S) reductions within threads. then we'd like to do the other reductions again within threads. 
+go backwards. suppose S=5. suppose irreducible size 8. so there are 4 blocks in a thread. we then want to do a single swap loading these relevant values into each thread, doing 2 rounds of decomp, then multiplication. 
+suppose S=5 and size 4. then there are 8 blocks in a thread, so we can do 3 rounds reduction here, that would mean 8 rounds reduction total, but I think there are still only 7 rounds. so we could instead have S=4. 
+so how do we do this single swap? it may be complex. we start with each thread holding 32 values, one for each of the 32 blocks. we may have to take 5 steps. the values a thread wants are distributed among all threads. I think the swaps can be the same as we already have. just delaying all arithmetic.
+
+seems about best at 55
+    pub const SD: usize = 5;
+    pub const TD: usize = 5;
+    pub const UD: usize = 0;
+    pub const VD: usize = 12;
+    pub const WD: usize = 4;
+    pub const BD: usize = 4;
+
+rather than 5 simdgroup ops, we should also try a single shared memory op.
+also using shared memory for the summing. 
+
+I'm rewriting the note now, but I suspect what we'll end up doing is the same cross-thread pattern but just for exchange, doing the arithmetic within threads afterwards. we need to work backwards through to distribution arithmetic in the first and second reductions. in the first reduction we necessarily reduce to log(S) blocks. 
+in the last reduction we start from irreducibles, which we reduce to from as many of them will fit in a thread, and this dictates how many reductions.
+suppose irreducible size is 8 and same with thread size. an element won't bit in a warp. and we could only do log(S)=3 rounds of intitial reduction. i guess we'd have to store these shared mem, and then do 3 rounds of reductions on the other parts. with p parts we'd continue to do in rounds of p parts, on each part reducing another 3. we need to reduce 7 though. 
+
+we arrive at how arrays represent decomp components. 
+with appproach 1 will this be the case? if we want to mix the two approaches i think it must.
+maybe approach 1 is coalescing swaps. 
+can we phrase each step as a swap and then decomp? 
+so it's different. for approach 2 they share and both sides need both values. we're instead thinking to exchange.
+
+suppose we try to do this for a single round. we need to figure out how threads must exchange.
+to do so we identify which threads hold which components before and after.
+this can be done looking at the encoding. 
+
+we start with l and we want to go to l+1.
+we have 2^l groups. suppose l=0. we have 1 group.
+we want to split into 2 groups.
+i think this is different. 
+
+block 0 is held at index 0 by all threads.
+block 1 at index 1. 
+block 1 may be large an unable to fit in a thread. but we want to get it inside as few threads as possible.
+
+the first R threads will hold block 0. 
+when we do this we want to do it as deep as possible. but we can't until we've reduced far enough.
+there are S blocks. each block is size D/S = TU. a thread can hold size SU. 
+so it takes TU/SU = T/S threads to hold a block.
+suppose we do this. is it in the right configuration? well it can't be if we haven't reduced. suppose we reduce within threads. 
+no, we will not end up in the right config. blocks will no longer correspond to array indices, but rather thread indices.
+solution 1 will have bank conflicts. a k-way conflict where k is the size blocks.
+
+let's simulate an optimal case. lets have adjacent threads or something just exchange all values. and this is in place of all sugroup ops. 
+well it is faster. let's try it. 
+
+we want to make sure we'll end up in the same config.
+
+
+
+
+
+
 
 
 
@@ -1136,6 +1291,110 @@ beta1 = 0
 we managed to generate code, but the algo gives the wrong answer. to debug. 
 now lets generate the schoolbook code. 
 
+
+
+
+
+
+
+
+
+
+
+
+
+https://developer.apple.com/videos/play/wwdc2016/606/?time=408
+
+i think we have unrolled written out in rolled form, we can debug unrolled form by comparing with rolled form, should be clear.
+so we benchmark. 
+
+i think what we're sing is smaller G makes it worse, that's good but unexpected news.
+while shared mem, larger T smaller S, doesn't seem to make any difference.
+
+stuck at like 700 for just 2^27.
+so shared mem doesn't seem to make a diff.
+that means m
+
+so there's no difference with shared mem. but it's better than before. i mean now we can have U=1.
+this is interesting. it may inform further.
+i'm setting U=F=1 and exchanging between E and T and S and G.
+E compensates for S,T, and G.
+G just says how much is in a block. most important is S and T. we have them add up to 10. 
+larger S and less shared mem, larger T and more shared mem. 
+all with LogOrd = 2
+G=0(E=17)
+    S,T
+    5,5 -> 819
+    4,6 -> 1.85
+    3,7 -> 1.10
+    2,8 -> 815
+    1,9 -> 777 best
+    0,10 -> 796
+G=1(E=16)
+    S,T
+    5,5 -> 814
+    4,6 -> 1.03
+    3,7 -> 809
+    2,8 -> 768 best
+    1,9 -> 786 
+G=2(E=15)
+    S,T
+    5,5 -> 816
+    4,6 -> 796
+    3,7 -> 811
+    2,8 -> 774 best
+G=3(E=14)
+    S,T
+    5,5 -> 811
+    4,6 -> 808
+    3,7 -> 0
+so best values had with S like 2^2.
+compare this with that we had before with S=2, U=3, T=5, G=3/4. that's 895 but that's with LogOrd=3
+
+
+now we're back a couple days later and I don't think we changed anything about the kernel but it handles smaller inputs now (in rolled form). unrolled form can handle it. i guess that's how we tested it before. 
+but now it seems once again rolled version is much slower. 
+so at this point all I know to do is develop for streamline and arbitrary ength chains for the new kernel.
+
+
+so what does this mean?
+so this ability to have fewer threads makes a difference.
+we now need to deal with multiplication. unless we have large U we're not in position to do it directly.
+we're in a position though where we don't see shared mem. we can do multiplication with simd.
+how are they distributed among threads? Suppose U=1.
+at this point we have k = log(D) - log(Ord) = 10 - 3 = 7.
+there are 2^l groups. there are S components in each group. I think they are distributed as normal. each of the T/2^l, l = log(TU)-log(Ord), 2^l = TU/Ord, T/2^l = Ord/U threads in the group holds U values of each S components. eg 8 threads hold 1 value of each of the S components. I guess if S is small there's less cross thread to do. 
+
+i guess we could do cross thread mult using schoolbook mult. we'd probably use shuffle. or i guess xor again. we'd like rotate.
+if we do karatsuba it can only be done thread locally. eg with S=2^2, multiplying sizes 8, we'd do one layer with schoolbook, the other with karatsuba. 
+
+ok, shared mem doesn't seem to make a diff, but rather it's the many trips to shared mem or xor_simd that seem to be costing. large S takes the same time, that requires many vals per thread.
+how many trips are we making. 
+S=2^2, then we need 5 cross-thread reductions. whereas we could reduce to 3
+S=2^3, 4 cross-thread, reduce to 2.
+neither numbers reflect the mult.
+
+so what's this new config?
+it will requires shared mem, right? because its a permutation.
+it reorganizes each time for having a thread hold values that will all be reduced together.
+our current schemes are canonical, just in writing, and our primary, sharing across warps of which is an implementation detail.
+
+we begin in this config if we have U=1.
+indeed, lets assume through this that U=1.
+switching to this config from U>1 we can leave for later.
+does this depend on poly form?
+no. like canonical, it's just different in array form.
+the size of the array matters. 
+
+
+note how a tree is like just a deeper ntt. only difference really is the same zeta. 
+
+
+we should benchmark against 2^2 size 2^26 commits in 2.2 to 2.3 seconds. their field size is 
+I think order of the subgroup is like 252.2 bits. call it 256. that's 2^8 bits.
+so that means they're committing to 2^{2+26+8} = 2^{36} bits in that time. a GB for us is 2^30*8 = 2^33 bits.
+of course note we have a more constrained GPU. 
+but we also need to compare against codes. 
 
 
 

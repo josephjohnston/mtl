@@ -1,13 +1,17 @@
 use std::process::Command;
 
+#[path = "src/params.rs"]
+mod params;
 #[path = "src/shaders/mod.rs"]
 mod shaders;
+
+const SHADER: &'static str = "unrolled";
 
 fn main() {
     println!("cargo:rerun-if-changed=src/shaders");
     // println!("cargo:rustc-link-search=all=target/debug/");
     // compile_ios();
-    // shaders::gen();
+    shaders::gen();
     compile_macos();
     // compile_air();
     // compile_lib();
@@ -18,8 +22,8 @@ fn compile_macos() {
         .args(["-sdk", "macosx"])
         .arg("metal")
         .arg("-std=metal3.0")
-        .arg("src/shaders/rolled.metal")
-        .args(["-o", "src/shaders/rolled_macos.metallib"])
+        .arg(format!("src/shaders/{SHADER}.metal"))
+        .args(["-o", &format!("src/shaders/{SHADER}_macos.metallib")])
         .output()
         .unwrap();
     if !output.status.success() {

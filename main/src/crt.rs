@@ -364,9 +364,9 @@ const nums: [u32; 2048] = [
     44,
 ];
 
-const ORD: u32 = 1;
+const ORD: u32 = 4;
 const S: u32 = 1 << 1;
-const T: u32 = 1 << 5;
+const T: u32 = 1 << 6;
 const U: u32 = 1 << 0;
 pub const D: u32 = S * T * U;
 // const N: u32 = 2 * D;
@@ -501,7 +501,8 @@ impl Ring {
     }
     pub fn decompose_across_threads(&mut self) {
         println!("\nDECOMPOSING");
-        for l in 0..(Self::logT() + Self::logU() - Self::logOrd()) {
+        for l in 0..1 {
+            //(Self::logT() + Self::logU() - Self::logOrd()) {
             for t in 0..T / (1 << l + 1) {
                 for r in 0..(1 << l) {
                     let lo_index = (2 * r) * T / (1 << l + 1) + t;

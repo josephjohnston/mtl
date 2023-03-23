@@ -1,79 +1,6 @@
 // use hal::*;
 use zpu::*;
 
-mod crt;
-use crt::*;
-
-#[derive(Debug)]
-struct Operand {
-    id: usize,
-    index: usize,
-}
-impl Operand {
-    pub fn new(id: usize, index: usize) -> Self {
-        Self { id, index }
-    }
-}
-enum Operation {
-    Add,
-    Sub,
-    Mul,
-}
-
-#[derive(Debug)]
-struct Instruction {
-    add_operand: Operand,
-    left_operand: Operand,
-    right_operand: Operand,
-    // add_operand: Operand, // operation: Operation,
-}
-impl Instruction {
-    pub fn new(add_operand: Operand, left_operand: Operand, right_operand: Operand) -> Self {
-        Self {
-            add_operand,
-            left_operand,
-            right_operand,
-        }
-    }
-}
-
-fn fma(k: usize) -> Vec<Instruction> {
-    if k == 0 {
-        let op_0 = Operand::new(0, 0);
-        let op_1 = Operand::new(1, 0);
-        let op_2 = Operand::new(2, 0);
-        let inst = Instruction::new(op_0, op_1, op_2);
-        return vec![inst];
-    }
-    let mut top_insts = fma(k / 2);
-    for inst in &mut top_insts {
-        inst.add_operand.index += k;
-        inst.left_operand.index += k;
-        inst.right_operand.index += k;
-    }
-    let mut bottom_insts = fma(k / 2);
-    // for inst in &mut bottom_insts {
-    //     inst.add_operand.index += k;
-    //     inst.left_operand.index += k;
-    //     inst.right_operand.index += k;
-    // }
-    bottom_insts.append(&mut top_insts);
-    bottom_insts
-}
-
-const EPSILON: u32 = (1 << 24) - (1 << 16) + (1 << 8) - (1 << 0);
-const P: u32 = ((1 << 32) - EPSILON as u64) as u32;
-use num_modular::ModularCoreOps;
-fn add(a: u32, b: u32) -> u32 {
-    a.addm(b, &P)
-}
-fn sub(a: u32, b: u32) -> u32 {
-    a.subm(b, &P)
-}
-fn mul(a: u32, b: u32) -> u32 {
-    a.mulm(b, &P)
-}
-
 // fn karat(
 //     k: usize,
 //     A: &Vec<u32>,
@@ -136,33 +63,7 @@ fn mul(a: u32, b: u32) -> u32 {
 // }
 //
 fn main() {
-    //     let mut A = vec![0, 0];
-    //     let mut B = vec![2, 3];
-    //     let mut C = vec![2, 3];
-    //     let mut D = vec![2, 3];
-    //     karat(1, &A, 0, &B, 0, &C, 0, &mut D, 0);
-    //     println!("{D:?}");
-
-    // let insts = fma(1);
-    // println!("{insts:#?}");
-
     rust_addition();
-
-    // let mut r = Ring::init();
-    // let results = r.reduce_all(6);
-    // let arrays = r.coefs_to_threads(results);
-    // // r.print();
-    // r.decompose_within_threads();
-    // // // r.print();
-    // r.decompose_across_threads();
-    // // r.rearrange();
-    // r.print();
-    // r.check(arrays);
-
-    // Ring::find_prim(256);
-    // Ring::find_prims(7);
-    // Ring::check_prims(8, 493853244);
-    // Ring::get_prim_sets();
 }
 
 // use hal::*;

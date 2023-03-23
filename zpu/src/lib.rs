@@ -1,14 +1,56 @@
 use hal::*;
 use rand::Rng;
+// use rand::Rng;
+use num_modular::ModularCoreOps;
+
+mod reference;
 
 mod naive;
+
+mod params;
+use params::*;
+
 mod shaders;
 
 #[no_mangle]
 #[allow(arithmetic_overflow)]
 pub extern "C" fn rust_addition() -> i32 {
-    naive::go();
-    // shaders::gen();
+    params::check();
+    // major input
+    let mut rng = rand::thread_rng();
+    let input_len = E * F * G * D;
+    let mut major_input: Vec<u8> = vec![0; input_len];
+    for i in 0..input_len {
+        major_input[i] = if major_input.len() <= (1 << 11) {
+            NUMS[i]
+        } else {
+            rng.gen::<u8>()
+        };
+    }
+    // minor input
+    let mult_val = 2091658123;
+    let add_val = 1523138830;
+    let mut state = 1;
+    let component_size = T_J * S / (1 << K);
+    let mut minor_input: Vec<u32> = vec![0; component_size];
+    // for i in 0..component_size {
+    //     state = add_val.addm(mult_val.mulm(state, &P), &P);
+    //     // minor_input[i] = state;
+    // }
+
+    minor_input[0] = 1;
+    // 3614796953;
+    // minor_input[1] = 1208427060;
+    // minor_input[2] = 1889015752;
+    // minor_input[3] = 3198863462;
+    println!("{minor_input:?}");
+
+    let gpu_coefs = naive::go(&major_input, 0);
+    let cpu_coefs = reference::go(&major_input, &minor_input);
+    for i in 0..cpu_coefs.len() {
+        assert_eq!(cpu_coefs[i], gpu_coefs[i]);
+    }
+    println!("\nGPU CONSISTENT");
 
     // let mut infos = GPU::current_gpus();
     // let info = infos.remove(0);
