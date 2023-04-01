@@ -8,7 +8,7 @@ struct Params {
     F: u16,
     G: u16,
     X: u16,
-    ORD: u16,
+    DEG: u16,
 }
 
 pub fn go(input_vals: &Vec<u8>, to_hide: usize) -> Vec<u32> {
@@ -44,7 +44,7 @@ pub fn go(input_vals: &Vec<u8>, to_hide: usize) -> Vec<u32> {
         F: F as u16,
         G: G as u16,
         X: X as u16,
-        ORD: ORD as u16,
+        DEG: DEG as u16,
     };
     cpass.set_bytes(
         2,

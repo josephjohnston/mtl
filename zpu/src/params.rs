@@ -3,54 +3,85 @@ pub const SHADER: &'static str = "unrolled";
 pub const EPSILON: u32 = (1 << 24) - (1 << 16) + (1 << 8) - (1 << 0);
 pub const P: u32 = ((1 << 32) - EPSILON as u64) as u32;
 
-enum Algorithm {
-    First,
-    Second,
+type Acidity = usize;
+// enum Prime {
+//     Cyclo80(Acidity),
+// }
+struct Prime<'a> {
+    name: &'a str,
+    number: usize,
+    acidity: usize,
 }
-const ALGORITHM: Algorithm = Algorithm::Second;
-enum Prime {
-    Cyclo_80,
-}
-const PRIME: Prime = Prime::Cyclo_80;
+// const PRIME: Prime = Prime::Cyclo80(8);
+const PRIME: Prime = Prime {
+    name: "Cyclo80",
+    number: 0,
+    acidity: 8,
+};
 
-pub const LOG_ORD: usize = 2;
+// number of threadblocks
 pub const LOG_E: usize = 0;
+// number of elements summed by each warp set
 pub const LOG_F: usize = 0;
-pub const LOG_G: usize = 0;
-pub const LOG_S: usize = 2;
-pub const LOG_T: usize = 6;
-pub const LOG_U: usize = 0;
-pub const LOG_W: usize = LOG_T - 5;
-pub const ORD: usize = 1 << LOG_ORD;
+// number of warp sets per threadblock
+pub const LOG_G: usize = 1;
+// array size for each thread
+pub const LOG_S: usize = 3;
+// number of threads in a warp set
+pub const LOG_T: usize = 7;
+// number of decompositions to apply
+pub const NUMBER_OF_DECOMPS: usize = 7;
 pub const E: usize = 1 << LOG_E;
 pub const F: usize = 1 << LOG_F;
 pub const G: usize = 1 << LOG_G;
 pub const S: usize = 1 << LOG_S;
 pub const T: usize = 1 << LOG_T;
-pub const U: usize = 1 << LOG_U;
-pub const D: usize = S * T * U;
+// element size
+pub const D: usize = S * T;
+
+// degree of polynomials defining quotient rings of elements to be multiplied
+pub const LOG_DEG: usize = LOG_S + LOG_T - NUMBER_OF_DECOMPS;
+pub const DEG: usize = 1 << LOG_DEG;
+// warp size ("eXecution width")
+pub const LOG_X: usize = 5;
+pub const X: usize = 1 << LOG_X;
+// number of warps in a warp set
+pub const LOG_W: usize = LOG_T - LOG_X;
 pub const W: usize = 1 << LOG_W;
-pub const X: usize = 1 << 5;
-pub const J: usize = 2;
-pub const K: usize = 2;
-pub const T_J: usize = T / S.pow(J as u32);
+
+// upper bounding number of decompositions
+const MAX_POSSIBLE_DECOMPS: usize = LOG_S * ((LOG_S + LOG_T) / LOG_S);
+const MAX_ALGEBRAIC_DECOMPS: usize = PRIME.acidity - 1;
+// J and K needed for decomposition algorithm
+pub const J: usize = match NUMBER_OF_DECOMPS % LOG_S {
+    0 => NUMBER_OF_DECOMPS / LOG_S - 1,
+    _ => NUMBER_OF_DECOMPS / LOG_S,
+};
+pub const K: usize = match NUMBER_OF_DECOMPS % LOG_S {
+    0 => LOG_S,
+    residue => residue,
+};
+pub const T_J: usize = if NUMBER_OF_DECOMPS <= MAX_POSSIBLE_DECOMPS {
+    T / S.pow(J as u32)
+} else {
+    panic!("need NUMBER_OF_DECOMPS <= MAX_POSSIBLE_DECOMPS")
+};
 
 pub fn check() {
-    assert!(LOG_T >= 5);
+    println!("S: {S}, T: {T}, J: {J}, K: {K}, T_J: {T_J}");
+    println!("DECOMPS: {NUMBER_OF_DECOMPS}");
+    println!("LOG_DEG: {LOG_DEG}");
+    assert!(NUMBER_OF_DECOMPS <= MAX_POSSIBLE_DECOMPS);
+    assert!(NUMBER_OF_DECOMPS <= MAX_ALGEBRAIC_DECOMPS);
+    // at most 1024 threads in a threadblock
     assert!(LOG_T + LOG_G <= 10);
-    match ALGORITHM {
-        Algorithm::First => {
-            assert!(LOG_T + LOG_U >= LOG_ORD + LOG_W);
-        }
-        Algorithm::Second => {}
-    }
-    match PRIME {
-        Prime::Cyclo_80 => {
-            assert!(LOG_S + LOG_T + LOG_U - LOG_ORD <= 7)
-        }
-    }
-
-    // assert!(d <= (LOG_S+LOG_T)/LOG_S);
+    // a component must fit in a thread
+    assert!(LOG_DEG <= LOG_S);
+    // shortening some parameters from ushort to uchar for space. validate in range.
+    assert!(W <= 256); // obvious
+    assert!(G <= 256); // obvious
+    assert!(S <= 256); // questionable
+    assert!(T <= 256); // questionable
 }
 
 pub const NUMS: [u8; 2048] = [
@@ -155,6 +186,33 @@ pub const NUMS: [u8; 2048] = [
     46, 201, 31, 47, 215, 20, 16, 76, 216, 109, 41, 198, 133, 123, 203, 97, 60, 13, 245, 147, 162,
     44,
 ];
+
+// const PRIMS_2: [u32; 1] = [1048576];
+// const PRIMS_3: [u32; 2] = [1024, 1073741824];
+// const PRIMS_4: [u32; 4] = [32, 33554432, 32768, 4144559881];
+// const PRIMS_5: [u32; 8] = [
+//     16707839, 4261539330, 4274061053, 4274061061, 534650848, 534912992, 4144037761, 4144037505,
+// ];
+// const PRIMS_6: [u32; 16] = [
+//     364914777, 2274230434, 1464515241, 1441048032, 3120762142, 45032751, 196321259, 947271947,
+//     4184386525, 3065742370, 919248094, 2278185239, 171586511, 531848519, 1274452609, 3982137898,
+// ];
+// const PRIMS_7: [u32; 32] = [
+//     1297642494, 3327754660, 2526751946, 2129504484, 3020261559, 3810020456, 3847465774, 3970313073,
+//     2689265513, 2766251085, 1388567172, 3842193303, 2954927500, 3786866165, 3159035588, 2626659467,
+//     2504948723, 1488462141, 3151931493, 2392531113, 3830654479, 1816320888, 1128492723, 3708275820,
+//     3081630698, 3779079003, 2234052728, 1762621666, 3037601520, 786573619, 1139377988, 4065946328,
+// ];
+// const PRIMS_8: [u32; 64] = [
+//     493853244, 2630285104, 871589258, 2389324427, 2968537725, 2882271469, 2221324090, 3728040527,
+//     1792685315, 4069366704, 338212691, 10783282, 2529644974, 2406181663, 2011959971, 3933190337,
+//     1122335902, 562582394, 1578728461, 1480102279, 889615164, 2589549385, 302463957, 819753580,
+//     1816837538, 2239014032, 599443123, 394504728, 1081892113, 2521481523, 210614787, 2069158492,
+//     2122591668, 3775120428, 1819528072, 180144644, 1486373247, 1670676750, 529152400, 3265551773,
+//     206566095, 3541041349, 1934204752, 1889168591, 3720435503, 1998977010, 2331859679, 2078683782,
+//     1026655235, 2800282348, 1058032482, 1155858166, 3909251897, 2761418424, 4043927916, 1373075368,
+//     2126899470, 276736331, 1013149118, 3965176830, 1805271112, 1462002270, 3979203491, 3886952625,
+// ];
 
 pub const ZETAS: [u32; 127] = [
     // 2

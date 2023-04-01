@@ -3,3 +3,6 @@ members = ["mtl","hal","zpu","main"]
 
 [profile.dev]
 overflow-checks = false
+
+[profile.test]
+opt-level = 3

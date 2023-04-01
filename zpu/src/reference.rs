@@ -4,24 +4,172 @@ use super::params::*;
 
 pub fn go(major_input: &[u8], minor_component: &[u32]) -> Vec<u32> {
     let mut output = vec![0; E * F * G * D];
-    for i in 0..E * F * G {
-        let major_input_slice: &[u8] = &major_input[i * D..(i + 1) * D];
-        let mut major = Ring::init(major_input_slice);
-        let k = 6; // LOG_S + LOG_T + LOG_U - LOG_ORD;
-        let reduced_coefs = major.reduce(k);
-        let multiplied_coefs = Ring::multiply(k, &reduced_coefs, minor_component);
-        let output_coefs = multiplied_coefs;
-        // r.decompose_within_threads();
-        // r.decompose_across_threads();
-        // println!("\nCPU COEFS");
-        // for i in 0..D {
-        //     println!("{i}: {}", output_coefs[i]);
-        // }
-        // let correct_coefs = r.check(k, print);
-        let output_range = i * D..(i + 1) * D;
-        output[output_range].clone_from_slice(&output_coefs);
+    for e in 0..E {
+        for f in 0..F {
+            for g in 0..G {
+                // we want to process for each block e separately. but we need to know where to write it. we're writing all to output.
+                let global_element_read_index = (e * F + f) * G + g;
+                let input_range =
+                    global_element_read_index * D..(global_element_read_index + 1) * D;
+
+                let major_input_slice: &[u8] = &major_input[input_range];
+                let mut major = Ring::init(major_input_slice);
+                let reduced_coefs = major.reduce(NUMBER_OF_DECOMPS);
+                let multiplied_coefs =
+                    Ring::multiply(NUMBER_OF_DECOMPS, &reduced_coefs, minor_component);
+                let output_coefs = multiplied_coefs;
+
+                // let correct_coefs = r.check(k, print);
+                // let global_element_write_index = (e * 1 + 0) * G + g;
+                // let output_range =
+                // global_element_write_index * D..(global_element_write_index + 1) * D;
+                for d in 0..D {
+                    let index = ((e * F + 0) * G + g) * D + d;
+                    // output[index] = output[index].addm(output_coefs[d], &P);
+                    output[index] = output[index].addm(output_coefs[d], &P);
+                }
+                // .clone_from_slice(&output_coefs);
+            }
+        }
     }
+
+    // println!("\nCPU COEFS");
+    // for i in 0..output.len() {
+    //     println!("{i}: {}", output[i]);
+    // }
+
     output
+
+    // // 2, 6, 4, 8, 3, 7, 5, 9
+    // // 2, 3, 4, 5, 6, 7, 8, 9
+    // let mut left = [2, 6, 4, 8, 3, 7, 5, 9];
+    // // [1723542064, 1305395542, 1002929091, 3613929278];
+    // // [2, 3, 4, 5, 6, 7, 8, 9];
+    // // [1723542064, 1305395542, 1002929091, 3613929278];
+    // let mut right = [0, 0, 0, 0, 0, 0, 0, 1];
+    // // [203, 101, 666, 220, 223, 402, 585, 189];
+    // dual_karatsuba(&mut left, 0, &mut right, 0, 8, true);
+    // println!("RESULTS");
+    // println!("left: {left:?}");
+    // println!("right: {right:?}");
+    // vec![0, 0]
+}
+
+fn dual_karatsuba(
+    left: &mut [u32],
+    left_index: usize,
+    right: &mut [u32],
+    right_index: usize,
+    Theta: usize,
+    preserve: bool,
+) {
+    let mut middle_array = vec![0; Theta];
+    let middle = &mut middle_array;
+    let middle_index = 0;
+    // 1: base case
+    if Theta == 1 {
+        left[left_index] = left[left_index].mulm(right[right_index], &P);
+        return;
+    }
+
+    // 3: copy upper half of left to middle
+    for theta in 0..Theta / 2 {
+        middle[middle_index + theta] = left[left_index + Theta / 2 + theta];
+    }
+
+    // 4: recursively multiply tops
+    dual_karatsuba(
+        middle,
+        middle_index,
+        right,
+        right_index + Theta / 2,
+        Theta / 2,
+        true,
+    );
+
+    // 5: add left and right lower to upper halves
+    for theta in 0..Theta / 2 {
+        left[left_index + Theta / 2 + theta] =
+            left[left_index + Theta / 2 + theta].addm(left[left_index + theta], &P);
+        right[right_index + Theta / 2 + theta] =
+            right[right_index + Theta / 2 + theta].addm(right[right_index + theta], &P);
+    }
+
+    // 6: recursively multiply middles and bottoms
+    dual_karatsuba(left, left_index, right, right_index, Theta / 2, preserve);
+    dual_karatsuba(
+        left,
+        left_index + Theta / 2,
+        right,
+        right_index + Theta / 2,
+        Theta / 2,
+        preserve,
+    );
+
+    // 7: subtract bottom and top from middle
+    for theta in 0..Theta / 2 {
+        left[left_index + Theta / 2 + theta] =
+            left[left_index + Theta / 2 + theta].subm(middle[middle_index + theta], &P);
+        left[left_index + Theta / 2 + theta] =
+            left[left_index + Theta / 2 + theta].subm(left[left_index + theta], &P);
+    }
+
+    if Theta == 8 {
+        println!("left: {left:?}");
+        println!("right: {right:?}");
+        println!("middle: {middle:?}");
+    }
+
+    fn rho(int: usize, range: usize) -> usize {
+        if range == 2 {
+            match int {
+                0 => 0,
+                1 => 1,
+                _ => panic!(),
+            }
+        } else if range == 4 {
+            match int {
+                0 => 0,
+                1 => 2,
+                2 => 1,
+                3 => 3,
+                _ => panic!(),
+            }
+        } else if range == 8 {
+            match int {
+                0 => 0,
+                1 => 4,
+                2 => 2,
+                3 => 6,
+                4 => 1,
+                5 => 5,
+                6 => 3,
+                7 => 7,
+                _ => panic!(),
+            }
+        } else {
+            println!("{}", range);
+            panic!();
+        }
+    }
+    // 8: finite field reduction
+    let zeta = 1 << 20;
+    left[left_index] =
+        left[left_index].addm(middle[middle_index + Theta / 2 - 1].mulm(zeta, &P), &P);
+    for theta in 1..Theta / 2 {
+        let power_basis_theta = rho(theta, Theta / 2);
+        let power_basis_middle_theta = rho(power_basis_theta - 1, Theta / 2);
+        left[left_index + theta] =
+            left[left_index + theta].addm(middle[middle_index + power_basis_middle_theta], &P);
+    }
+
+    // 9: preservation of right
+    if preserve {
+        for theta in 0..Theta / 2 {
+            right[right_index + Theta / 2 + theta] =
+                right[right_index + Theta / 2 + theta].subm(right[right_index + theta], &P);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -65,7 +213,7 @@ impl Ring {
     pub fn multiply(k: usize, major_components: &[u32], minor_component: &[u32]) -> Vec<u32> {
         let component_size = T_J * S / (1 << K);
         let mut output = vec![0; D];
-        for component_index in 0..D / ORD {
+        for component_index in 0..D / DEG {
             let range_bottom = component_index * component_size;
             let range_top = (component_index + 1) * component_size;
             let major_component = &major_components[range_bottom..range_top];

@@ -61,9 +61,10 @@ use zpu::*;
 //         D[off_D + k + i] = sub(D[off_D + k + i], D[off_D + 2 * k + i]);
 //     }
 // }
-//
+
 fn main() {
-    rust_addition();
+    // rust_addition();
+    println!("h");
 }
 
 // use hal::*;

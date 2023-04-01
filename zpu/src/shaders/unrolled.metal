@@ -9,98 +9,32 @@ kernel void go(
     ushort w_global [[simdgroup_index_in_threadgroup]],
     ushort t_local [[thread_index_in_simdgroup]])
 {
-    uint array[4];
-    ushort w = w_global & ((1 << 1) - 1);
+    uint array[8];
+    uint acc[8] = {0};
+    ushort g = w_global >> 2;
+    ushort w = w_global & (4 - 1);
     ushort tau = w * 32 + t_local;
-    ushort g = w_global / 2;
-    uint global_read_index_prefix = e * 256 + 0 * 256 + g * 256 + 0 * 64 + tau * 1 + 0 * 1;
+    uint global_read_index_prefix = e * 2048 + 0 * 2048 + g * 1024 + 0 * 128 + tau * 1;
     
     for (ushort f = 0; f < 1; f++)
     {
-        
         // READ INPUT
-        for (ushort s = 0; s < 4; s++)
+        for (ushort s = 0; s < 8; s++)
         {
-            for (ushort u = 0; u < 1; u++)
-            {
-                uint global_read_index = global_read_index_prefix + 0 * 256 + 0 * 256 + 0 * 256 + s * 64 + 0 * 1 + u * 1;
-                array[s * 1 + u] = uint(input[global_read_index]);
-            }
+            array[s] = uint(input[global_read_index_prefix + 0 * 2048 + 0 * 2048 + 0 * 1024 + s * 128 + 0 * 1]);
         }
-        global_read_index_prefix += 0 * 256 + 1 * 256 + 0 * 256 + 0 * 64 + 0 * 1 + 0 * 1;
+        global_read_index_prefix += 0 * 2048 + 1 * 2048 + 0 * 1024 + 0 * 128 + 0 * 1;
         
         // DECOMPOSE WITH CHAIN
-        ushort Dj = 256;
-        ushort Tj = 64;
-        ushort r = 0;
-        ushort i = 0;
-        ushort t = tau;
-        
-        // DECOMPOSE WITHIN THREADS 0
-        for (ushort k = 0; k < 2; k++)
         {
-            ushort s_bound = 4 / (1 << (k + 1));
-            for (ushort i = 0; i < (1 << k); i++)
+            // DECOMPOSE WITHIN THREADS 0
+            for (ushort k = 0; k < 3; k++)
             {
-                uint zeta = zetas((1 << k) - 1 + i);
-                ushort lo_index_prefix = (2 * i) * s_bound;
-                ushort hi_index_prefix = lo_index_prefix + s_bound;
-                for (ushort s = 0; s < s_bound; s++)
+                ushort s_bound = 1 << (3 - (k + 1));
+                for (ushort i = 0; i < (1 << k); i++)
                 {
-                    {
-                        ushort hi_index = (hi_index_prefix + s) * 1 + 0;
-                        uint mult = mul(array[hi_index], zeta);
-                        ushort lo_index = (lo_index_prefix + s) * 1 + 0;
-                        array[hi_index] = sub(array[lo_index], mult);
-                        array[lo_index] = add(array[lo_index], mult);
-                    }
-                }
-            }
-        }
-        for (ushort j = 1; j <= 2; j++)
-        {
-            Dj /= 4;
-            Tj /= 4;
-            i = (tau / Tj) & (4 - 1);
-            t = tau & (Tj - 1);
-            
-            if (32 < Dj)
-            // TRANSPOSE ACROSS WARPS
-            {
-                for (ushort s = 0; s < 4; s++)
-                {
-                    ushort index = g * 256 + (r * 4 + s) * Dj + i * Tj + t;
-                    shared[index] = array[s];
-                }
-                threadgroup_barrier(metal::mem_flags::mem_threadgroup);
-                for (ushort s = 0; s < 4; s++)
-                {
-                    ushort index = g * 256 + (r * 4 + i) * Dj + s * Tj + t;
-                    array[s] = shared[index];
-                }
-            }
-            else
-            // TRANSPOSE ACROSS THREADS
-            {
-                for (ushort s = 0; s < 4; s++)
-                {
-                    ushort mask = s * Tj;
-                    ushort index = s ^ i;
-                    array[index] = metal::simd_shuffle_xor(array[index], mask);
-                }
-            }
-            
-            // DECOMPOSE WITHIN THREADS j
-            ushort r_new = r * 4 + i;
-            ushort k_bound = j < 2 ? 2 : 2;
-            for (ushort k = 0; k < k_bound; k++)
-            {
-                ushort s_bound = 4 / (1 << (k + 1));
-                for (ushort i_new = 0; i_new < (1 << k); i_new++)
-                {
-                    ushort component_index = r_new * (1 << k) + i_new;
-                    uint zeta = zetas((1 << (j * 2 + k)) - 1 + component_index);
-                    ushort lo_index_prefix = (2 * i_new) * s_bound;
+                    uint zeta = zetas((1 << k) - 1 + i);
+                    ushort lo_index_prefix = (2 * i) * s_bound;
                     ushort hi_index_prefix = lo_index_prefix + s_bound;
                     for (ushort s = 0; s < s_bound; s++)
                     {
@@ -112,106 +46,129 @@ kernel void go(
                     }
                 }
             }
-            
-            r = tau / Tj;
+            for (ushort j = 1; j <= 2; j++)
+            {
+                ushort log_power_S_to_j = j * 3;
+                ushort log_Dj = (3 + 7) - log_power_S_to_j;
+                ushort r = tau >> log_Dj;
+                ushort Tj = 128 >> log_power_S_to_j;
+                ushort log_Tj = 7 - log_power_S_to_j;
+                ushort i = (tau >> log_Tj) & (8 - 1);
+                ushort t = tau & (Tj - 1);
+                
+                if (5 < log_Dj)
+                // TRANSPOSE ACROSS WARPS
+                {
+                    ushort Dj = 1 << log_Dj;
+                    for (ushort s = 0; s < 8; s++)
+                    {
+                        if (s == i)
+                        {
+                            continue;
+                        }
+                        ushort index = g * 1024 + (r * 8 + s) * Dj + i * Tj + t;
+                        shared[index] = array[s];
+                    }
+                    threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+                    for (ushort s = 0; s < 8; s++)
+                    {
+                        if (s == i)
+                        {
+                            continue;
+                        }
+                        ushort index = g * 1024 + (r * 8 + i) * Dj + s * Tj + t;
+                        array[s] = shared[index];
+                    }
+                }
+                else
+                // TRANSPOSE ACROSS THREADS
+                {
+                    for (ushort s = 0; s < 8; s++)
+                    {
+                        ushort index = s ^ i;
+                        array[index] = metal::simd_shuffle_xor(array[index], s * Tj);
+                    }
+                }
+                
+                // DECOMPOSE WITHIN THREADS j > 0
+                ushort r_new = r * 8 + i;
+                ushort k_bound = j < 2 ? 3 : 1;
+                for (ushort k = 0; k < k_bound; k++)
+                {
+                    ushort s_bound = 1 << (3 - (k + 1));
+                    for (ushort i_new = 0; i_new < (1 << k); i_new++)
+                    {
+                        ushort component_index = r_new * (1 << k) + i_new;
+                        uint zeta = zetas((1 << (j * 3 + k)) - 1 + component_index);
+                        ushort lo_index_prefix = (2 * i_new) * s_bound;
+                        ushort hi_index_prefix = lo_index_prefix + s_bound;
+                        for (ushort s = 0; s < s_bound; s++)
+                        {
+                            ushort hi_index = hi_index_prefix + s;
+                            uint mult = mul(array[hi_index], zeta);
+                            ushort lo_index = lo_index_prefix + s;
+                            array[hi_index] = sub(array[lo_index], mult);
+                            array[lo_index] = add(array[lo_index], mult);
+                        }
+                    }
+                }
+            }
         }
         
-        // COLLECT IRREDUCIBLES INTO THREADS
-        uint tmp[4] = {0};
-        for (ushort mask = 0; mask < 4; mask++)
+        // COLLECT COMPONENTS INTO THREADS
         {
-            for (ushort v = 0; v < 4 / 4; v++)
+            ushort t = tau & (2 - 1);
+            for (ushort mask = 0; mask < 2; mask++)
             {
                 ushort other = t ^ mask;
-                ushort index = other * (4 / 4) + v;
-                tmp[index] = metal::simd_shuffle_xor(array[index], mask);
+                ushort scaled_other = other * (8 / 2);
+                for (ushort v = 0; v < 8 / 2; v++)
+                {
+                    ushort index = scaled_other + v;
+                    array[index] = metal::simd_shuffle_xor(array[index], mask);
+                }
             }
         }
-        for (ushort mask = 0; mask < Tj; mask++)
-        {
-            for (ushort v = 0; v < 4 / Tj; v++)
-            {
-                ushort other = t ^ mask;
-                ushort new_index = v * Tj + other;
-                ushort old_index = other * (4 / Tj) + v;
-                array[old_index] = tmp[new_index];
-            }
-        }
-        ushort u = 0;
-        uint middle[4] = {0};
-        uint minors[4] = {1, 0, 0, 0};
-        ushort component_index = (r * Tj + t) * ((1 << 2) / Tj) + u;
-        ushort zeta_index = (1 << ((2 - 1) * 2 + 2 + 1)) - 1 + component_index / 2;
-        uint zeta = zetas(zeta_index);
-        if (component_index % 2) { zeta = sub(0, zeta); }
-        // Theta = 4
-        middle[(4 - 2) + 0] = array[0 + 4 / 2 + 0];
-        middle[(4 - 2) + 1] = array[0 + 4 / 2 + 1];
-        {
-            // Theta = 2
-            middle[(2 - 2) + 0] = array[0 + 2 / 2 + 0];
-            {
-                // Theta = 1
-                array[0] = mul(array[0], minors[0]);
-                // Theta = 1
-                middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 2 / 2]);
-            }
-            array[0 + 2 / 2 + 0] = array[0 + 2 / 2 + 0] + array[0 + 0];
-            minors[0 + 2 / 2 + 0] = minors[0 + 2 / 2 + 0] + minors[0 + 0];
-            // Theta = 1
-            array[0 + 2 / 2] = mul(array[0 + 2 / 2], minors[0 + 2 / 2]);
-            array[0 + 2 / 2 + 0] = sub(array[0 + 2 / 2 + 0], middle[(2 - 2) + 0]);
-            array[0 + 2 / 2 + 0] = sub(array[0 + 2 / 2 + 0], array[0 + 0]);
-            array[0 + 0] = add(array[0 + 0], mul(middle[(2 - 2) + 0], zeta));
-            // Theta = 2
-            middle[(2 - 2) + 0] = middle[(4 - 2) + 2 / 2 + 0];
-            {
-                // Theta = 1
-                middle[(4 - 2)] = mul(middle[(4 - 2)], minors[0 + 4 / 2]);
-                // Theta = 1
-                middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 4 / 2 + 2 / 2]);
-            }
-            middle[(4 - 2) + 2 / 2 + 0] = middle[(4 - 2) + 2 / 2 + 0] + middle[(4 - 2) + 0];
-            minors[0 + 4 / 2 + 2 / 2 + 0] = minors[0 + 4 / 2 + 2 / 2 + 0] + minors[0 + 4 / 2 + 0];
-            // Theta = 1
-            middle[(4 - 2) + 2 / 2] = mul(middle[(4 - 2) + 2 / 2], minors[0 + 4 / 2 + 2 / 2]);
-            middle[(4 - 2) + 2 / 2 + 0] = sub(middle[(4 - 2) + 2 / 2 + 0], middle[(2 - 2) + 0]);
-            middle[(4 - 2) + 2 / 2 + 0] = sub(middle[(4 - 2) + 2 / 2 + 0], middle[(4 - 2) + 0]);
-            middle[(4 - 2) + 0] = add(middle[(4 - 2) + 0], mul(middle[(2 - 2) + 0], zeta));
-        }
-        array[0 + 4 / 2 + 0] = array[0 + 4 / 2 + 0] + array[0 + 0];
-        minors[0 + 4 / 2 + 0] = minors[0 + 4 / 2 + 0] + minors[0 + 0];
-        array[0 + 4 / 2 + 1] = array[0 + 4 / 2 + 1] + array[0 + 1];
-        minors[0 + 4 / 2 + 1] = minors[0 + 4 / 2 + 1] + minors[0 + 1];
-        // Theta = 2
-        middle[(2 - 2) + 0] = array[0 + 4 / 2 + 2 / 2 + 0];
-        {
-            // Theta = 1
-            array[0 + 4 / 2] = mul(array[0 + 4 / 2], minors[0 + 4 / 2]);
-            // Theta = 1
-            middle[(2 - 2)] = mul(middle[(2 - 2)], minors[0 + 4 / 2 + 2 / 2]);
-        }
-        array[0 + 4 / 2 + 2 / 2 + 0] = array[0 + 4 / 2 + 2 / 2 + 0] + array[0 + 4 / 2 + 0];
-        minors[0 + 4 / 2 + 2 / 2 + 0] = minors[0 + 4 / 2 + 2 / 2 + 0] + minors[0 + 4 / 2 + 0];
-        // Theta = 1
-        array[0 + 4 / 2 + 2 / 2] = mul(array[0 + 4 / 2 + 2 / 2], minors[0 + 4 / 2 + 2 / 2]);
-        array[0 + 4 / 2 + 2 / 2 + 0] = sub(array[0 + 4 / 2 + 2 / 2 + 0], middle[(2 - 2) + 0]);
-        array[0 + 4 / 2 + 2 / 2 + 0] = sub(array[0 + 4 / 2 + 2 / 2 + 0], array[0 + 4 / 2 + 0]);
-        array[0 + 4 / 2 + 0] = add(array[0 + 4 / 2 + 0], mul(middle[(2 - 2) + 0], zeta));
-        array[0 + 4 / 2 + 0] = sub(array[0 + 4 / 2 + 0], middle[(4 - 2) + 0]);
-        array[0 + 4 / 2 + 0] = sub(array[0 + 4 / 2 + 0], array[0 + 0]);
-        array[0 + 4 / 2 + 1] = sub(array[0 + 4 / 2 + 1], middle[(4 - 2) + 1]);
-        array[0 + 4 / 2 + 1] = sub(array[0 + 4 / 2 + 1], array[0 + 1]);
-        array[0 + 0] = add(array[0 + 0], mul(middle[(4 - 2) + 0], zeta));
-        array[0 + 1] = add(array[0 + 1], mul(middle[(4 - 2) + 1], zeta));
         
-        // WRITE OUTPUT
-        uint global_write_index_prefix = e * 256 + 0 * 256 + g * 256 + 0 * 64 + 0 * 1 + 0 * 1;
-        ushort tau_lower = tau & (Tj - 1);
-        for (ushort s = 0; s < 4; s++)
+        // SCHOOLBOOK MULTIPLICATION
+        uint minors[2 * 8 / (1 << 1)] = {3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752,3198863462};
+        for (ushort u = 0; u < (1 << 1) / 2; u++)
         {
-            uint index = (r * Tj + tau_lower) * 4 + s;
-            output[index] = array[s];
+            ushort component_index = tau * ((1 << 1) / 2) + u;
+            uint zeta = zetas((1 << (2 * 3 + 1 - 1)) - 1 + (component_index >> 1));
+            zeta = component_index & 1 ? sub(0, zeta) : zeta;
+            for (ushort s1 = 0; s1 < 4; s1++)
+            {
+                for (ushort t1 = 0; t1 < 2; t1++)
+                {
+                    ushort coef_index = s1 * 2 + t1;
+                    if (coef_index > 0)
+                    {
+                        ushort new_bottom_index = t1 == 0 ? (u + 1) * (8 / (1 << 1)) - s1 : (2 - t1) * (8 / 2) + (u + 1) * 4 - (s1 + 1);
+                        array[new_bottom_index] = mul(array[new_bottom_index], zeta);
+                    }
+                    for (ushort s2 = 0; s2 < 4; s2++)
+                    {
+                        for (ushort t2 = 0; t2 < 2; t2++)
+                        {
+                            ushort array_index = t2 * (8 / 2) + u * 4 + s2;
+                            ushort delta = (coef_index + (s2 * 2 + t2)) % (2 * 4);
+                            ushort acc_index = u * (2 * 4) + delta;
+                            acc[acc_index] = add(acc[acc_index], mul(array[array_index], minors[coef_index]));
+                        }
+                    }
+                }
+            }
         }
+    }
+    
+    // WRITE OUTPUT
+    ushort gamma = t_local >> (5 - 3);
+    ushort delta = t_local & (32 / 8 - 1);
+    ushort global_write_index_prefix = (e * 2048 + 0 * 2048 + g * 1024 + 0 * 128 + 0 * 1) + w * 32 * 8 + gamma * 32 + delta * 8;
+    for (ushort s = 0; s < 8; s++)
+    {
+        ushort index = (gamma + s) & (8 - 1);
+        output[global_write_index_prefix + index] = acc[index];
     }
 }
