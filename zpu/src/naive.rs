@@ -11,7 +11,7 @@ struct Params {
     DEG: u16,
 }
 
-pub fn go(input_vals: &Vec<u8>, to_hide: usize) -> Vec<u32> {
+pub fn go(input_vals: &[Input], constant_vals: &[Output], to_hide: usize) -> Vec<Output> {
     let mut infos = GPU::current_gpus();
     let info = infos.remove(0);
     let gpu = GPU::new(info);
@@ -25,38 +25,42 @@ pub fn go(input_vals: &Vec<u8>, to_hide: usize) -> Vec<u32> {
 
     let block_size = Size::new(T * G, 1, 1);
     let grid_size = Size::new(E, 1, 1);
-    let mut input = gpu.new_buffer::<u8>("input".into(), E * F * G * D, true);
+    let mut input = gpu.new_buffer::<Input>("input".into(), D * E * F * G, true);
     for (i, x) in input.as_mut_slice().iter_mut().enumerate() {
-        *x = input_vals[i] as u8;
+        *x = input_vals[i];
     }
-    let output = gpu.new_buffer::<u32>("output".into(), E * F * G * D, true);
-
+    let output = gpu.new_buffer::<Output>("output".into(), D * E * F * G, true);
+    let mut constants = gpu.new_buffer::<Output>("constants".into(), D * E * F * G, true);
+    for (i, x) in constants.as_mut_slice().iter_mut().enumerate() {
+        *x = constant_vals[i];
+    }
+    println!("\nASSIGNMENT DONE!");
     let mut timestamp_sampler = gpu.new_timestamp_sampler(5, false);
     let batch = queue.new_batch(false);
 
     let cpass = batch.new_compute_pass(Some(&mut timestamp_sampler));
     cpass.set_buffer(0, &input, 0);
-    cpass.set_threadgroup_memory_length(1 << 16, 0); // T * E * 4
+    cpass.set_threadgroup_memory_length(G * D * 4, 0);
     cpass.set_buffer(1, &output, 0);
+    cpass.set_buffer(2, &constants, 0);
 
-    let params = Params {
-        E: E as u32,
-        F: F as u16,
-        G: G as u16,
-        X: X as u16,
-        DEG: DEG as u16,
-    };
-    cpass.set_bytes(
-        2,
-        &params as *const Params as *const std::ffi::c_void,
-        1 * std::mem::size_of::<u32>() + 4 * std::mem::size_of::<u16>(),
-    );
+    // let params = Params {
+    //     E: E as u32,
+    //     F: F as u16,
+    //     G: G as u16,
+    //     X: X as u16,
+    //     DEG: DEG as u16,
+    // };
+    // cpass.set_bytes(
+    //     2,
+    //     &params as *const Params as *const std::ffi::c_void,
+    //     1 * std::mem::size_of::<u32>() + 4 * std::mem::size_of::<u16>(),
+    // );
     // cpass.set_imageblock_size(1 << 5, 1);
     cpass.set_pipeline(&pipeline);
     cpass.dispatch(block_size, grid_size);
     cpass.end_encoding();
-
-    println!("\nPRNG DONE!");
+    println!("\nENCODING DONE!");
     batch.commit();
     batch.wait_until_completed();
 

@@ -2,45 +2,41 @@ use super::*;
 
 use rand::Rng;
 
+fn generate_major_input() -> Vec<Input> {
+    let mut rng = rand::thread_rng();
+    let input_len = E * F * G * D;
+    let mut major_input: Vec<Input> = vec![0; input_len];
+    for i in 0..input_len {
+        major_input[i] = if major_input.len() <= (1 << 11) {
+            NUMS[i] as Input
+        } else {
+            rng.gen::<Input>()
+        };
+    }
+    major_input
+}
+
+fn generate_constants() -> Vec<Output> {
+    let mut rng = rand::thread_rng();
+    let constants_len = D * E * F * G;
+    let mut constants: Vec<Output> = vec![0; constants_len];
+    for i in 0..constants_len {
+        constants[i] = rng.gen::<Output>();
+    }
+    constants
+}
+
 #[test]
 fn random() {
     params::check();
-    // major input
-    let mut rng = rand::thread_rng();
-    let input_len = E * F * G * D;
-    let mut major_input: Vec<u8> = vec![0; input_len];
-    for i in 0..input_len {
-        major_input[i] = if major_input.len() <= (1 << 11) {
-            NUMS[i]
-        } else {
-            rng.gen::<u8>()
-        };
-    }
+    let major_input = generate_major_input();
+    let constants = generate_constants();
+    println!("\nPRNG DONE!");
 
-    // minor input
-    // let mult_val = 2091658123;
-    // let add_val = 1523138830;
-    // let mut state = 1;
-    let component_size = T_J * S / (1 << K);
-    let mut minor_input: Vec<u32> = vec![0; component_size];
-    // for i in 0..component_size {
-    //     state = add_val.addm(mult_val.mulm(state, &P), &P);
-    //     minor_input[i] = state;
-    // }
-
-    minor_input[0] = 3614796953;
-    minor_input[1] = 1208427060;
-    minor_input[2] = 1889015752;
-    minor_input[3] = 3198863462;
-    minor_input[4] = 3614796953;
-    minor_input[5] = 1208427060;
-    minor_input[6] = 1889015752;
-    minor_input[7] = 3198863462;
-
-    let gpu_coefs = naive::go(&major_input, 22);
-    let cpu_coefs = reference::go(&major_input, &minor_input);
+    let gpu_coefs = naive::go(&major_input, &constants, 0);
+    let cpu_coefs = reference::go(&major_input, &constants);
     for i in 0..cpu_coefs.len() {
-        assert_eq!(cpu_coefs[i], gpu_coefs[i]);
+        assert_eq!(cpu_coefs[i], gpu_coefs[i].addm(0, &P));
     }
     println!("\nGPU CONSISTENT");
 }

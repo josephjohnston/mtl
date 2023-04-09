@@ -23,9 +23,10 @@ pub fn gen() {
     w.init_kernel(
         format!("go"),
         vec![
-            format!("device uchar *input"),
-            format!("threadgroup uint *shared"),
-            format!("device uint *output"),
+            format!("device {INPUT_TYPE} *input",),
+            format!("threadgroup {OUTPUT_TYPE} *shared"),
+            format!("device {OUTPUT_TYPE} *output"),
+            format!("device {OUTPUT_TYPE} *constants"),
             format!("uint e [[threadgroup_position_in_grid]]"),
             format!("ushort w_global [[simdgroup_index_in_threadgroup]]"),
             format!("ushort t_local [[thread_index_in_simdgroup]]"),
@@ -45,22 +46,23 @@ pub fn gen() {
     w.empty_line()
         .begin_for(format!("ushort f = 0"), format!("f < {F}"), format!("f++"));
     {
-        read_code(&mut w, false);
-        decompose_with_chain(&mut w, false, false, false, false);
-        collect_into_threads_code(&mut w, false, false);
-        schoolbook_multiplication_code(&mut w, false, false, false);
-        // karatsuba_multiplication_code(&mut w, true, true, false, true);
-        // dual_karatsuba_multiplication_code(&mut w, false, false, false);
+        // read_code(&mut w, false);
+        // decompose_with_chain(&mut w, false, false, false, false);
+        // collect_into_threads_code(&mut w, false, false);
+        // // schoolbook_multiplication_code(&mut w, false, false, false);
+        // karatsuba_multiplication_code(&mut w, false, false, false, false);
+        // // dual_karatsuba_multiplication_code(&mut w, false, false, false);
 
-        // read_code(&mut w, true);
-        // decompose_with_chain(&mut w, true, true, true, true);
-        // collect_into_threads_code(&mut w, true, true);
+        read_code(&mut w, true);
+        decompose_with_chain(&mut w, true, true, true, true);
+        collect_into_threads_code(&mut w, true, true);
         // schoolbook_multiplication_code(&mut w, true, true, true);
-        // // karatsuba_multiplication_code(&mut w, true);
-        // dual_karatsuba_multiplication_code(&mut w, true);
+        karatsuba_multiplication_code(&mut w, true, true, true, true);
+        // dual_karatsuba_multiplication_code(&mut w, true, true, true);
     }
     w.end_for();
-    write_output_code(&mut w, false, false);
+    write_to_shared_code(&mut w, false, true);
+    // write_output_code(&mut w);
     w.flush().unwrap();
 }
 
@@ -335,7 +337,8 @@ fn decompose_within_threads_code_j(w: &mut LibraryWriter, j: &str, unroll: bool)
                     w.lines(vec![
                         format!("ushort component_index = r_new * (1 << {k}) + {i_new};"),
                         format!(
-                            "uint zeta = zetas((1 << ({j} * {LOG_S} + {k})) - 1 + component_index);"
+                            "uint zeta = zeta_arrays[(1 << ({j} * {LOG_S} + {k})) - 1 + component_index];"
+                            // "uint zeta = zetas((1 << ({j} * {LOG_S} + {k})) - 1 + component_index);"
                         ),
                         format!("ushort lo_index_prefix = {lo_index_prefix};"),
                         format!("ushort hi_index_prefix = {hi_index_prefix};"),
@@ -368,7 +371,10 @@ fn decompose_within_threads_code_j(w: &mut LibraryWriter, j: &str, unroll: bool)
             {
                 w.lines(vec![
                     format!("ushort component_index = r_new * (1 << k) + i_new;"),
-                    format!("uint zeta = zetas((1 << ({j} * {LOG_S} + k)) - 1 + component_index);"),
+                    // format!("uint zeta = zetas((1 << ({j} * {LOG_S} + k)) - 1 + component_index);"),
+                    format!(
+                        "uint zeta = zeta_arrays[(1 << ({j} * {LOG_S} + k)) - 1 + component_index];"
+                    ),
                     format!("ushort lo_index_prefix = (2 * i_new) * s_bound;"),
                     format!("ushort hi_index_prefix = lo_index_prefix + s_bound;"),
                 ]);
@@ -426,7 +432,7 @@ fn collect_into_threads_code(w: &mut LibraryWriter, unroll_mask: bool, unroll_v:
     {
         w.line(format!("ushort t = tau & ({T_J} - 1);"));
         if unroll_mask {
-            for mask in 0..T_J {
+            for mask in 1..T_J {
                 w.begin_scope();
                 {
                     write_mask_integrand(w, &format!("{mask}"))
@@ -435,7 +441,7 @@ fn collect_into_threads_code(w: &mut LibraryWriter, unroll_mask: bool, unroll_v:
             }
         } else {
             w.begin_for(
-                format!("ushort mask = 0"),
+                format!("ushort mask = 1"),
                 format!("mask < {T_J}"),
                 format!("mask++"),
             );
@@ -544,7 +550,7 @@ fn schoolbook_multiplication_code(
         }
     };
     w.line(format!(
-        "uint minors[{T_J} * {S} / (1 << {K})] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752,3198863462}};"
+        "uint minors[{T_J} * {S} / (1 << {K})] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752, 3198863462}};"
     ));
     if unroll_u {
         for u in 0..(1 << K) / T_J {
@@ -877,7 +883,7 @@ fn karatsuba_multiplication_code(
     };
     let write_reduction_integrand = |w: &mut LibraryWriter, theta: &str| {
         w.lines(vec![
-            format!("uint mult = mul(minors[{theta}], zeta);"),
+            format!("uint mult = mul(minors[0 + {theta}], zeta);"),
             format!("acc[acc_offset + {theta}] = add(acc[acc_offset + {theta}], mult);"),
         ]);
     };
@@ -900,8 +906,11 @@ fn karatsuba_multiplication_code(
         w.lines(vec![
             format!("ushort component_index = tau * ((1 << {K}) / {T_J}) + {u};"),
             // format!("uint zeta = get_zeta({J} * {LOG_S} + {K} + 1, component_index);"),
+            // format!(
+            //     "uint zeta = zetas((1 << ({J} * {LOG_S} + {K} - 1)) - 1 + (component_index >> 1));"
+            // ),
             format!(
-                "uint zeta = zetas((1 << ({J} * {LOG_S} + {K} - 1)) - 1 + (component_index >> 1));"
+                "uint zeta = zeta_arrays[(1 << ({J} * {LOG_S} + {K} - 1)) - 1 + (component_index >> 1)];"
             ),
             format!("zeta = component_index & 1 ? sub(0, zeta) : zeta;"),
         ]);
@@ -925,12 +934,33 @@ fn karatsuba_multiplication_code(
             w.end_for();
         }
     };
+    w.line(format!("uint middle[{}];", big_theta * 2 - 1));
+    // w.line(format!(
+    //     "uint global_constants_index = ((e * {F} + f) * {G} + g) * {D};"
+    // ));
+    // if unroll_addition {
+    w.line(format!("uint minors[{S}] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752, 3198863462}};"));
+    // for s in 0..S {
+    //     w.begin_scope();
+    //     {
+    //         w.lines(vec![
+    //             format!("uint global_index = global_constants_index + tau * {S} + {s};"),
+    //             format!("array[{s}] = constants[global_index];"),
+    //         ]);
+    //     }
+    //     w.end_scope();
+    // }
+    // } else {
+    //     w.begin_for(format!("ushort s = 0"), format!("s < {S}"), format!("s++"));
+    //     {
+    //         w.lines(vec![
+    //                 format!("uint global_index = global_constants_index + tau * {S} + s;//g * {D} + tau * {S} + s;"),
+    //                 format!("array[s] = constants[global_index];"),
+    //             ]);
+    //     }
+    //     w.end_for();
+    // }
     add_to_acc(w);
-    w.line(format!(
-        "uint minors[{}] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752, 3198863462}};",
-        big_theta
-    ));
-    w.line(format!("uint middle[{}] = {{0}};", big_theta * 2 - 1));
     if unroll_u {
         for u in 0..(1 << K) / T_J {
             w.begin_scope();
@@ -1299,7 +1329,7 @@ fn dual_karatsuba_multiplication_code(
     };
     add_to_acc(w);
     w.line(format!(
-        "uint minors[{}] = {{3614796953, 3614796953, 1889015752, 1889015752, 1208427060, 1208427060, 3198863462, 3198863462}};",
+        "uint minors[{}] = {{1, 0}};",
         // 8: {{3614796953, 3614796953, 1889015752, 1889015752, 1208427060, 1208427060, 3198863462, 3198863462}}
         // 4: {{3614796953, 1889015752, 1208427060, 3198863462}}
         // "uint minors[{}] = {{3614796953, 1889015752, 1208427060, 3198863462}};",
@@ -1327,13 +1357,30 @@ fn dual_karatsuba_multiplication_code(
     }
 }
 
-fn write_output_code(w: &mut LibraryWriter, dual_basis: bool, unroll: bool) {
+fn write_output_code(w: &mut LibraryWriter) {
+    w.empty_line().comment(format!("WRITE_OUTPUT"));
+    // w.line(format!("if (w_global > 0)"))
+    //     .begin_scope()
+    //     .line(format!("return;"))
+    //     .end_scope();
+    for s in 0..S {
+        w.line(format!(
+            "output[{}] = acc[{s}];",
+            get_index("e", "0", "g", &format!("{s}"), "tau")
+        ));
+    }
+}
+
+fn write_to_shared_code(w: &mut LibraryWriter, dual_basis: bool, unroll: bool) {
     w.empty_line().comment(format!("WRITE OUTPUT"));
     w.lines(vec![
         format!("ushort gamma = t_local >> ({LOG_X} - {LOG_S});"),
         format!("ushort delta = t_local & ({X} / {S} - 1);"),
+        // format!(
+        //     "uint shared_write_index_prefix = g * {D} + w * {X} * {S} + gamma * {X} + delta * {S};"
+        // ),
         format!(
-            "ushort global_write_index_prefix = ({}) + w * {X} * {S} + gamma * {X} + delta * {S};",
+            "uint shared_write_index_prefix = ({}) + w * {X} * {S} + gamma * {X} + delta * {S};",
             get_index("e", "0", "g", "0", "0")
         ),
     ]);
@@ -1350,87 +1397,70 @@ fn write_output_code(w: &mut LibraryWriter, dual_basis: bool, unroll: bool) {
                     format!("ushort u = index >> {log_component_size};"),
                     format!("ushort coef_index = index & ({component_size} - 1);"),
                     format!(
-                        "output[global_write_index_prefix + index] = acc[u * {component_size} + rho(coef_index, {component_size})];"
+                        "output[shared_write_index_prefix + index] = acc[u * {component_size} + rho(coef_index, {component_size})];"
                     ),
                 ]);
             } else {
                 w.lines(vec![
                     format!("ushort index = (gamma + {s}) & ({S} - 1);"),
-                    format!("output[global_write_index_prefix + index] = acc[index];"),
+                    format!("output[shared_write_index_prefix + index] = acc[index];"),
                 ]);
+                // w.lines(vec![
+                //     format!("ushort index = (gamma + {s}) & ({S} - 1);"),
+                //     format!("shared[shared_write_index_prefix + index] = acc[index];"),
+                // ]);
             }
         }
     };
-    if unroll {
-        for s in 0..S {
-            w.begin_scope();
-            {
-                write_s_integrand(w, &format!("{s}"));
-            }
-            w.end_scope();
-        }
-    } else {
-        w.begin_for(format!("ushort s = 0"), format!("s < {S}"), format!("s++"));
-        {
-            write_s_integrand(w, "s");
-        }
-        w.end_for();
-    }
-}
 
-fn rho(int: usize, range: usize) -> usize {
-    if range == 1 {
-        match int {
-            0 => 0,
-            _ => panic!(),
+    // w.line(format!("if (g > 0)"))
+    //     .begin_scope()
+    //     .line(format!("return;"))
+    //     .end_scope();
+    // w.line(format!("if (g == 1)")).begin_scope();
+    {
+        if unroll {
+            for s in 0..S {
+                w.begin_scope();
+                {
+                    write_s_integrand(w, &format!("{s}"));
+                }
+                w.end_scope();
+            }
+        } else {
+            w.begin_for(format!("ushort s = 0"), format!("s < {S}"), format!("s++"));
+            {
+                write_s_integrand(w, "s");
+            }
+            w.end_for();
         }
-    } else if range == 2 {
-        match int {
-            0 => 0,
-            1 => 1,
-            _ => panic!(),
-        }
-    } else if range == 4 {
-        match int {
-            0 => 0,
-            1 => 2,
-            2 => 1,
-            3 => 3,
-            _ => panic!(),
-        }
-    } else if range == 8 {
-        match int {
-            0 => 0,
-            1 => 4,
-            2 => 2,
-            3 => 6,
-            4 => 1,
-            5 => 5,
-            6 => 3,
-            7 => 7,
-            _ => panic!(),
-        }
-    } else if range == 16 {
-        match int {
-            0 => 0,
-            1 => 8,
-            2 => 4,
-            3 => 12,
-            4 => 2,
-            5 => 10,
-            6 => 6,
-            7 => 14,
-            8 => 1,
-            9 => 9,
-            10 => 5,
-            11 => 13,
-            12 => 3,
-            13 => 11,
-            14 => 7,
-            15 => 15,
-            _ => panic!(),
-        }
-    } else {
-        panic!("QUERYING RHO OUT OF RANGE");
     }
+    // w.end_scope();
+
+    // w.empty_line().comment(format!("ADD ACROSS WARPS"));
+    // w.line(format!(
+    //     "threadgroup_barrier(metal::mem_flags::mem_threadgroup);"
+    // ));
+
+    // w.line(format!(
+    //     "uint global_write_index_prefix = ({});",
+    //     get_index("e", "0", "g", "0", "0")
+    // ));
+    // // iterate through length s, and
+    // w.begin_for(format!("ushort s = 0"), format!("s < {S}"), format!("s++"));
+    // {
+    //     w.lines(vec![
+    //         // format!("ushort index =  s;"),
+    //         // each warp is only to add from the other
+    //         // so we must find our warp, that is w,
+    //         // each warp adds up for the other.
+    //         // basically i think we could just have
+    //         // format!("ushort val = shared[index];"),
+    //         // format!("acc[s] = add(acc[s], val);"),
+    //         format!(
+    //             "output[global_write_index_prefix + s] = shared[shared_write_index_prefix + s];"
+    //         ),
+    //     ]);
+    // }
+    // w.end_for();
 }

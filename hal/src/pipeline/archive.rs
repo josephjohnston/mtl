@@ -169,9 +169,12 @@ impl<'a> Archive<'a> {
         // // buffer_mutability_array.set_object_at_indexed_subscript(&buff_0, 0);
 
         // println!("buffers: {:?}", obj.mutability());
+
+        println!("add compute pipeline");
         self.id
             .add_compute_pipeline_functions_with_descriptor(&desc)
             .unwrap();
+        println!("compute pipeline compiled");
     }
     // pub fn simplified(
     //     device: &mtl::Device,

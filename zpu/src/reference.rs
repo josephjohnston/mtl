@@ -2,21 +2,22 @@ use num_modular::ModularCoreOps;
 
 use super::params::*;
 
-pub fn go(major_input: &[u8], minor_component: &[u32]) -> Vec<u32> {
+pub fn go(major_input: &[Input], constants: &[Output]) -> Vec<Output> {
     let mut output = vec![0; E * F * G * D];
     for e in 0..E {
         for f in 0..F {
             for g in 0..G {
-                // we want to process for each block e separately. but we need to know where to write it. we're writing all to output.
                 let global_element_read_index = (e * F + f) * G + g;
                 let input_range =
                     global_element_read_index * D..(global_element_read_index + 1) * D;
-
-                let major_input_slice: &[u8] = &major_input[input_range];
-                let mut major = Ring::init(major_input_slice);
+                let minor_components: &[Output] =
+                    &constants[global_element_read_index * D..(global_element_read_index + 1) * D];
+                // we want to process for each block e separately. but we need to know where to write it. we're writing all to output.
+                let major_input_slice: &[Input] = &major_input[input_range];
+                let major = Ring::init(major_input_slice);
                 let reduced_coefs = major.reduce(NUMBER_OF_DECOMPS);
                 let multiplied_coefs =
-                    Ring::multiply(NUMBER_OF_DECOMPS, &reduced_coefs, minor_component);
+                    Ring::multiply(NUMBER_OF_DECOMPS, &reduced_coefs, minor_components);
                 let output_coefs = multiplied_coefs;
 
                 // let correct_coefs = r.check(k, print);
@@ -33,10 +34,12 @@ pub fn go(major_input: &[u8], minor_component: &[u32]) -> Vec<u32> {
         }
     }
 
-    // println!("\nCPU COEFS");
-    // for i in 0..output.len() {
-    //     println!("{i}: {}", output[i]);
-    // }
+    println!("\nCPU COEFS");
+    for (i, x) in output.iter().enumerate() {
+        if i % (1 << 10) == 0 {
+            println!("{i}: {x}");
+        }
+    }
 
     output
 
@@ -113,45 +116,6 @@ fn dual_karatsuba(
         left[left_index + Theta / 2 + theta] =
             left[left_index + Theta / 2 + theta].subm(left[left_index + theta], &P);
     }
-
-    if Theta == 8 {
-        println!("left: {left:?}");
-        println!("right: {right:?}");
-        println!("middle: {middle:?}");
-    }
-
-    fn rho(int: usize, range: usize) -> usize {
-        if range == 2 {
-            match int {
-                0 => 0,
-                1 => 1,
-                _ => panic!(),
-            }
-        } else if range == 4 {
-            match int {
-                0 => 0,
-                1 => 2,
-                2 => 1,
-                3 => 3,
-                _ => panic!(),
-            }
-        } else if range == 8 {
-            match int {
-                0 => 0,
-                1 => 4,
-                2 => 2,
-                3 => 6,
-                4 => 1,
-                5 => 5,
-                6 => 3,
-                7 => 7,
-                _ => panic!(),
-            }
-        } else {
-            println!("{}", range);
-            panic!();
-        }
-    }
     // 8: finite field reduction
     let zeta = 1 << 20;
     left[left_index] =
@@ -174,18 +138,18 @@ fn dual_karatsuba(
 
 #[derive(Debug)]
 pub struct Ring {
-    pub coefs: Vec<u32>,
+    pub coefs: Vec<Output>,
 }
 impl Ring {
-    pub fn init(input: &[u8]) -> Self {
+    pub fn init(input: &[Input]) -> Self {
         let mut r = Self { coefs: vec![0; D] };
         for i in 0..D {
-            r.coefs[i] = input[i] as u32;
+            r.coefs[i] = input[i] as Output;
         }
         // Self::coefs_to_arrays(&mut r.arrays, &r.coefs);
         r
     }
-    pub fn reduce(&self, k: usize) -> Vec<u32> {
+    pub fn reduce(&self, k: usize) -> Vec<Output> {
         let d = D / (1 << k);
         let mut reduced_coefs = vec![0; D];
         for i in 0..(1 << k) {
@@ -197,7 +161,7 @@ impl Ring {
         }
         reduced_coefs
     }
-    fn reduce_to_irreducible(&self, d: usize, zeta: u32) -> Vec<u32> {
+    fn reduce_to_irreducible(&self, d: usize, zeta: Output) -> Vec<Output> {
         let mut result = vec![0; d];
         for j in 0..d {
             let mut zeta_acc = 1;
@@ -210,12 +174,22 @@ impl Ring {
         }
         result
     }
-    pub fn multiply(k: usize, major_components: &[u32], minor_component: &[u32]) -> Vec<u32> {
+    pub fn multiply(
+        k: usize,
+        major_components: &[Output],
+        minor_components: &[Output],
+    ) -> Vec<Output> {
         let component_size = T_J * S / (1 << K);
         let mut output = vec![0; D];
         for component_index in 0..D / DEG {
             let range_bottom = component_index * component_size;
             let range_top = (component_index + 1) * component_size;
+            let minor_component = &minor_components[range_bottom..range_top];
+            let minor_component = vec![
+                3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752,
+                3198863462,
+            ];
+            // ];
             let major_component = &major_components[range_bottom..range_top];
             Self::multiply_component(
                 k,
@@ -230,9 +204,9 @@ impl Ring {
     pub fn multiply_component(
         k: usize,
         component_index: usize,
-        major_component: &[u32],
-        minor_component: &[u32],
-        output: &mut [u32],
+        major_component: &[Output],
+        minor_component: &[Output],
+        output: &mut [Output],
     ) {
         let zeta = Self::get_zeta(k + 1, component_index);
         let component_size = T_J * S / (1 << K);
@@ -252,7 +226,7 @@ impl Ring {
             self.coefs[i] = self.coefs[i].addm(other.coefs[i], &P);
         }
     }
-    fn get_zeta(k: usize, index: usize) -> u32 {
+    fn get_zeta(k: usize, index: usize) -> Output {
         let prims_1 = [1 << 8];
         let prims_2 = [
             // (1 << 20), (1 << 30).mulm(1 << 30, &P)
