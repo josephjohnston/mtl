@@ -66,7 +66,7 @@ impl Device {
         pointer: *const c_void,
         length: usize,
         options: ResourceOptions,
-        deallocator: Option<&Block<(*const c_void, usize), ()>>,
+        deallocator: Option<&block::Block<(*const c_void, usize), ()>>,
     ) -> Id<Buffer> {
         unsafe {
             let raw_buffer: *mut Buffer = msg_send![

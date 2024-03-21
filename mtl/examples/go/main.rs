@@ -12,7 +12,7 @@ fn main() {
         let device = create_system_default_device();
         let lib = device
             .new_library_with_url(&NSURL::url_with_string(&NSString::from_str(
-                "file:///Users/josephjohnston/zpu/mtl/examples/go/shader.metallib",
+                "file:///Users/josephjohnston/saga/mtl/examples/go/shader.metallib",
             )))
             .unwrap();
         let func = lib.new_function_with_name(&NSString::from_str("go"));

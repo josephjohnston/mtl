@@ -1,13 +1,13 @@
-// use zpu::*;
+// // use zpu::*;
 
-// const ARRAY_LENGTH: usize = 4;
-// const BUFFER_SIZE: usize = ARRAY_LENGTH * 4;
+// // const ARRAY_LENGTH: usize = 4;
+// // const BUFFER_SIZE: usize = ARRAY_LENGTH * 4;
 
 // fn main() {
 //     // INIT
 //     let device = create_system_default_device();
 
-//     let base_str = "file:///Users/josephjohnston/zpu/src/";
+//     let base_str = "file:///Users/josephjohnston/saga/mtl/examples/sum/";
 //     let base_url = NSURL::url_with_string(base_str);
 //     let main_str = "shader.metallib";
 //     let url = NSURL::url_with_string_relative_to_url(main_str, &base_url);

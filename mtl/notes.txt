@@ -1,4 +1,5 @@
 
+
 I guess we should be building a DLS, something that makes it not so verbose, and also that forces an understanding. 
 we were thinking to have a DSL for low level proofs. 
 would these be two separate layers?
