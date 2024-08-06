@@ -4,7 +4,7 @@ mod archive;
 pub use archive::*;
 
 pub struct Pipeline {
-    id: Id<mtl::ComputePipelineState>,
+    id: Retained<mtl::ComputePipelineState>,
     execution_width: usize,
     threadgroup_memory_length: usize,
     max_threads_per_threadgroup: usize,

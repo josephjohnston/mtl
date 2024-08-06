@@ -30,7 +30,7 @@ impl AttributeDescriptor {
 declare!(AttributeDescriptorArray);
 impl AttributeDescriptorArray {
     // [M] objectAtIndexedSubscript:
-    pub fn object_at_index_subscript(&self, index: usize) -> Id<AttributeDescriptor> {
+    pub fn object_at_index_subscript(&self, index: usize) -> Retained<AttributeDescriptor> {
         unsafe { msg_send_id![self, objectAtIndexedSubscript: index] }
     }
     // [M] setObject:atIndexedSubscript:
@@ -73,7 +73,7 @@ impl BufferLayoutDescriptor {
 declare!(BufferLayoutDescriptorArray);
 impl BufferLayoutDescriptorArray {
     // [M] objectAtIndexedSubscript:
-    pub fn object_at_indexed_subscript(&self, index: usize) -> Id<BufferLayoutDescriptor> {
+    pub fn object_at_indexed_subscript(&self, index: usize) -> Retained<BufferLayoutDescriptor> {
         unsafe { msg_send_id![self, objectAtIndexedSubscript: index] }
     }
     // [M] setObject:atIndexedSubscript:
@@ -96,7 +96,7 @@ impl BufferLayoutDescriptorArray {
 declare!(StageInputOutputDescriptor);
 impl StageInputOutputDescriptor {
     // [M] stageInputOutputDescriptor
-    pub fn stage_input_output_descriptor() -> Id<StageInputOutputDescriptor> {
+    pub fn stage_input_output_descriptor() -> Retained<StageInputOutputDescriptor> {
         unsafe {
             msg_send_id![
                 class!(MTLStageInputOutputDescriptor),
@@ -105,11 +105,11 @@ impl StageInputOutputDescriptor {
         }
     }
     // [P] attributes
-    pub fn attributes(&self) -> Id<AttributeDescriptorArray> {
+    pub fn attributes(&self) -> Retained<AttributeDescriptorArray> {
         unsafe { msg_send_id![self, attributes] }
     }
     // [P] layouts
-    pub fn layouts(&self) -> Id<BufferLayoutDescriptorArray> {
+    pub fn layouts(&self) -> Retained<BufferLayoutDescriptorArray> {
         unsafe { msg_send_id![self, layouts] }
     }
     // [P] indexBufferIndex and setIndexBufferIndex

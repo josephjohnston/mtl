@@ -1,10 +1,5 @@
 use super::*;
 
-// what's the design?
-// we have 'batches' (command buffers)
-// batches create 'passes'
-// a pass either is a compute or blit pass
-
 // pub enum BatchStatus {
 //     NotEnqueued = 0,
 //     Enqueued = 1,
@@ -64,11 +59,11 @@ impl Batch {
             Some(timestamp_sampler) => {
                 let compute_pass_attachments = self.compute_pass_desc.sample_buffer_attachments();
                 let attachment = compute_pass_attachments.object_at_indexed_subscript(0);
-                attachment.set_sample_buffer(timestamp_sampler.get_ref());
-                let start_index = timestamp_sampler.get_next_start_index();
-                let end_index = start_index + 1;
-                attachment.set_start_of_encoder_sample_index(start_index);
-                attachment.set_end_of_encoder_sample_index(end_index);
+                // attachment.set_sample_buffer(timestamp_sampler.get_ref());
+                // let start_index = timestamp_sampler.get_next_start_index();
+                // let end_index = start_index + 1;
+                // attachment.set_start_of_encoder_sample_index(start_index);
+                // attachment.set_end_of_encoder_sample_index(end_index);
             }
             _ => (),
         };
@@ -158,8 +153,6 @@ impl MultiBatch {
 // Execution Range
 
 // if you want to pass anything other than a buffer, must put those resources in an argument buffer
-
-// important is that textures only reside in device mem, we want to do lots in threadgroup mem, so maybe only use buffers.
 
 pub struct IndirectComputeCommand {
     id: Id<mtl::IndirectComputeCommand>,

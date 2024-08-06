@@ -4,24 +4,35 @@ use super::*;
 declare!(CounterSet);
 impl CounterSet {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] counters
-    pub fn counters(&self) -> Vec<Id<Counter>> {
-        unsafe { NSArray::into_vec(msg_send_id![self, counters]) }
+    pub fn counters(&self) -> Retained<NSArray<Counter>> {
+        //Vec<Retained<Counter>> {
+        unsafe {
+            let array: Retained<NSArray<Counter>> = msg_send_id![self, counters];
+            array
+            // array
+            //     .to_vec()
+            //     .into_iter()
+            //     .map(|x| x as *const Counter as *mut Counter)
+            //     .map(|x| Id::retain(x).unwrap())
+            //     .collect()
+        }
     }
 }
 
 // MTLCommonCounterSet
 pub const COMMON_COUNTER_SET_TIMESTAMP: &str = "timestamp";
 pub const COMMON_COUNTER_SET_STATISTIC: &str = "statistic";
+pub const COMMON_COUNTER_SET_STAGE_UTILIZATION: &str = "stageUtilization";
 
 // [Pr] MTLCounter
 declare!(Counter);
 impl Counter {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
 }
@@ -29,16 +40,17 @@ impl Counter {
 // MTLCommonCounter
 pub const COMMON_COUNTER_TIMESTEP: &str = "GPUTimestamp";
 pub const COMMON_COUNTER_COMPUTE_KERNEL_INVOCATIONS: &str = "KernelInfocations";
+pub const COMMON_COUNTER_TOTAL_CYCLES: &str = "TotalCycles";
 
 // [C] MTLCounterSampleBufferDescriptor
 declare!(CounterSampleBufferDescriptor);
 impl Label for CounterSampleBufferDescriptor {}
 impl CounterSampleBufferDescriptor {
-    pub fn new() -> Id<CounterSampleBufferDescriptor> {
+    pub fn new() -> Retained<CounterSampleBufferDescriptor> {
         unsafe { msg_send_id![class!(MTLCounterSampleBufferDescriptor), new] }
     }
     // [P] counterSet and setCounterSet
-    pub fn counter_set(&self) -> Option<Id<CounterSet>> {
+    pub fn counter_set(&self) -> Option<Retained<CounterSet>> {
         unsafe { msg_send_id![self, counterSet] }
     }
     pub fn set_counter_set(&self, counter_set: &CounterSet) {
@@ -64,7 +76,7 @@ impl CounterSampleBufferDescriptor {
 declare!(CounterSampleBuffer);
 impl CounterSampleBuffer {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [P] sampleCount
@@ -72,8 +84,8 @@ impl CounterSampleBuffer {
         unsafe { msg_send![self, sampleCounte] }
     }
     // [M] resolveCounterRange:
-    pub fn resolve_counter_range(&self, range: std::ops::Range<usize>) -> Id<NSData> {
-        unsafe { msg_send_id![self, resolveCounterRange: NSRange::from(range)] }
+    pub fn resolve_counter_range(&self, range: NSRange) -> Retained<NSData> {
+        unsafe { msg_send_id![self, resolveCounterRange: range] }
     }
 }
 
@@ -93,7 +105,7 @@ impl_encode_for_type!(CounterSamplingPoint: usize);
 declare!(BlitPassSampleBufferAttachmentDescriptor);
 impl BlitPassSampleBufferAttachmentDescriptor {
     // [P] sampleBuffer and setSampleBuffer
-    pub fn sample_buffer(&self) -> Option<Id<CounterSampleBuffer>> {
+    pub fn sample_buffer(&self) -> Option<Retained<CounterSampleBuffer>> {
         unsafe { msg_send_id![self, sampleBuffer] }
     }
     pub fn set_sample_buffer(&self, sample_buffer: &CounterSampleBuffer) {
@@ -122,7 +134,7 @@ impl BlitPassSampleBufferAttachmentDescriptorArray {
     pub fn object_at_indexed_subscript(
         &self,
         index: usize,
-    ) -> Id<BlitPassSampleBufferAttachmentDescriptor> {
+    ) -> Retained<BlitPassSampleBufferAttachmentDescriptor> {
         unsafe { msg_send_id![self, objectAtIndexedSubscript: index] }
     }
     // [M] setObject:atIndexedSubscript:
@@ -139,8 +151,8 @@ impl BlitPassSampleBufferAttachmentDescriptorArray {
 declare!(ComputePassSampleBufferAttachmentDescriptor);
 impl ComputePassSampleBufferAttachmentDescriptor {
     // [P] sampleBuffer and setSampleBuffer
-    pub fn sample_buffer(&self) -> Id<CounterSampleBuffer> {
-        unsafe { Id::retain(msg_send![self, sampleBuffer]).expect(ID_RETAIN_FAILURE) }
+    pub fn sample_buffer(&self) -> Retained<CounterSampleBuffer> {
+        unsafe { Retained::retain(msg_send![self, sampleBuffer]).expect(ID_RETAIN_FAILURE) }
     }
     pub fn set_sample_buffer(&self, sample_buffer: &CounterSampleBuffer) {
         unsafe { msg_send![self, setSampleBuffer: sample_buffer] }
@@ -168,9 +180,9 @@ impl ComputePassSampleBufferAttachmentDescriptorArray {
     pub fn object_at_indexed_subscript(
         &self,
         attachment_index: usize,
-    ) -> Id<ComputePassSampleBufferAttachmentDescriptor> {
+    ) -> Retained<ComputePassSampleBufferAttachmentDescriptor> {
         unsafe {
-            Id::retain(msg_send![self, objectAtIndexedSubscript: attachment_index])
+            Retained::retain(msg_send![self, objectAtIndexedSubscript: attachment_index])
                 .expect(ID_RETAIN_FAILURE)
         }
     }
@@ -185,14 +197,13 @@ impl ComputePassSampleBufferAttachmentDescriptorArray {
 }
 
 // [T] MTLTimestamp
-// pub type Timestamp = usize;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Timestamp {
-    pub value: usize,
+    pub value: u64,
 }
 unsafe impl Encode for Timestamp {
-    const ENCODING: Encoding = Encoding::Struct("Timestamp", &[usize::ENCODING]);
+    const ENCODING: Encoding = Encoding::Struct("Timestamp", &[u64::ENCODING]);
 }
 unsafe impl RefEncode for Timestamp {
     // const ENCODING_REF: Encoding = Object::ENCODING_REF;
@@ -200,7 +211,9 @@ unsafe impl RefEncode for Timestamp {
 }
 impl Timestamp {
     pub fn new(value: usize) -> Self {
-        Self { value }
+        Self {
+            value: value as u64,
+        }
     }
 }
 

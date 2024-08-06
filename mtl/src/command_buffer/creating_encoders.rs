@@ -1,8 +1,8 @@
 use super::*;
 
 // [E] MTLDispatchType
+#[derive(Debug, Clone, Copy)]
 #[repr(usize)]
-#[derive(Debug)]
 pub enum DispatchType {
     Serial = 0,
     Concurrent = 1,
@@ -11,14 +11,14 @@ impl_encode_for_type!(DispatchType: usize);
 
 impl CommandBuffer {
     // [M] computeCommandEncoder
-    pub fn compute_command_encoder(&self) -> Id<ComputeCommandEncoder> {
+    pub fn compute_command_encoder(&self) -> Retained<ComputeCommandEncoder> {
         unsafe { msg_send_id![self, computeCommandEncoder] }
     }
     // [M] computeCommandEncoderWithDescriptor:
     pub fn compute_command_encoder_with_descriptor(
         &self,
         compute_pass_descriptor: &ComputePassDescriptor,
-    ) -> Id<ComputeCommandEncoder> {
+    ) -> Retained<ComputeCommandEncoder> {
         unsafe {
             msg_send_id![
                 self,
@@ -30,18 +30,18 @@ impl CommandBuffer {
     pub fn compute_command_encoder_with_dispatch_type(
         &self,
         dispatch_type: DispatchType,
-    ) -> Id<ComputeCommandEncoder> {
+    ) -> Retained<ComputeCommandEncoder> {
         unsafe { msg_send_id![self, computeCommandEncoderWithDispatchType: dispatch_type] }
     }
     // [M] blitCommandEncoder
-    pub fn blit_command_encoder(&self) -> Id<BlitCommandEncoder> {
+    pub fn blit_command_encoder(&self) -> Retained<BlitCommandEncoder> {
         unsafe { msg_send_id![self, blitCommandEncoder] }
     }
     // [M] blitCommandEncoderWithDescriptor
     pub fn blit_command_encoder_with_descriptor(
         &self,
         blit_pass_descriptor: &BlitPassDescriptor,
-    ) -> Id<BlitCommandEncoder> {
+    ) -> Retained<BlitCommandEncoder> {
         unsafe { msg_send_id![self, blitCommandEncoderWithDescriptor: blit_pass_descriptor] }
     }
 }
@@ -49,14 +49,14 @@ impl CommandBuffer {
 // /// # Creating Resource State Encoders
 // impl CommandBuffer {
 //     // [M] resourceStateCommandEncoder
-//     pub fn resource_state_command_encoder(&self) -> Id<ResourceStateCommandEncoder> {
+//     pub fn resource_state_command_encoder(&self) -> Retained<ResourceStateCommandEncoder> {
 //         unsafe { msg_send_id![self, resourceStateCommandEncoder] }
 //     }
 //     // [M] resourceStateCommandEncoderWithDescriptor:
 //     pub fn resource_state_command_encoder_with_descriptor(
 //         &self,
 //         resource_state_pass_descriptor: &ResourceStatePassDescriptor,
-//     ) -> Id<ResourceStateCommandEncoder> {
+//     ) -> Retained<ResourceStateCommandEncoder> {
 //         unsafe {
 //             msg_send_id![
 //                 self,
@@ -72,7 +72,7 @@ impl CommandBuffer {
 //     pub fn render_command_encoder_with_descriptor(
 //         &self,
 //         render_pass_descriptor: &RenderPassDescriptor,
-//     ) -> Id<RenderCommandEncoder, Shared> {
+//     ) -> Retained<RenderCommandEncoder, Shared> {
 //         unsafe {
 //             let raw_encoder: *mut RenderCommandEncoder = msg_send![
 //                 self,
@@ -89,7 +89,7 @@ impl CommandBuffer {
 //     pub fn parallel_render_command_encoder_with_descriptor(
 //         &self,
 //         render_pass_descriptor: &RenderPassDescriptor,
-//     ) -> Id<ParallelRenderCommandEncoder, Shared> {
+//     ) -> Retained<ParallelRenderCommandEncoder, Shared> {
 //         unsafe {
 //             let raw_encoder: *mut ParallelRenderCommandEncoder = msg_send![
 //                 self,
@@ -99,6 +99,3 @@ impl CommandBuffer {
 //         }
 //     }
 // }
-
-// /// # Creating Acceleration Structure Encoders
-// impl CommandBuffer {}

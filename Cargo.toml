@@ -1,6 +1,5 @@
 [workspace]
-# members = ["mtl","hal","zpu","main"]
-members = ["mtl"]
+members = ["mtl", "hal", "zpu", "main"]
 
 # [profile.dev]
 # overflow-checks = false

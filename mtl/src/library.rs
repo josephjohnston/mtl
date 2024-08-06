@@ -11,11 +11,11 @@ impl_encode_for_type!(LibraryType: isize);
 // [C] MTLCompilerOptions
 declare!(CompileOptions);
 impl CompileOptions {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLCompileOptions), new] }
     }
     // [P] libraries and compileLibraries
-    pub fn libraries(&self) -> Id<NSArray<DynamicLibrary>> {
+    pub fn libraries(&self) -> Retained<NSArray<DynamicLibrary>> {
         unsafe { msg_send_id![self, libraries] }
     }
     pub fn set_libraries(&self, libraries: &NSArray<DynamicLibrary>) {
@@ -29,7 +29,7 @@ impl CompileOptions {
         unsafe { msg_send![self, setLibraryType: library_type] }
     }
     // [P] installName and setInstallName
-    pub fn install_name(&self) -> Id<NSString> {
+    pub fn install_name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, installName] }
     }
     pub fn set_install_name(&self, install_name: &NSString) {
@@ -42,11 +42,11 @@ declare!(Library);
 impl Label for Library {}
 impl Library {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [P] installName
-    pub fn install_name(&self) -> Id<NSString> {
+    pub fn install_name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, installName] }
     }
     // [P] type
@@ -54,14 +54,14 @@ impl Library {
         unsafe { msg_send![self, type] }
     }
     // [P] functionNames
-    pub fn function_names(&self) -> Id<NSArray<NSString>> {
+    pub fn function_names(&self) -> Retained<NSArray<NSString>> {
         unsafe { msg_send_id![self, functionNames] }
     }
     // [M] newFunctionWithName:
-    pub fn new_function_with_name(&self, function_name: &NSString) -> Id<Function> {
+    pub fn new_function_with_name(&self, function_name: &NSString) -> Retained<Function> {
         unsafe {
             let raw_function: *mut Function = msg_send![self, newFunctionWithName: function_name];
-            Id::new(raw_function).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_function).expect(ID_NEW_FAILURE)
         }
     }
     // [M] newFunctionWithName:constantValues:error:
@@ -125,11 +125,11 @@ declare!(DynamicLibrary);
 impl Label for DynamicLibrary {}
 impl DynamicLibrary {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [P] installName
-    pub fn install_name(&self) -> Id<NSString> {
+    pub fn install_name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, installName] }
     }
     // [M] serializeToURL:error:
@@ -141,11 +141,11 @@ impl DynamicLibrary {
 // [C] MTLBinaryArchiveDescriptor
 declare!(BinaryArchiveDescriptor);
 impl BinaryArchiveDescriptor {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLBinaryArchiveDescriptor), new] }
     }
     // [P] url and setUrl
-    pub fn url(&self) -> Id<NSURL> {
+    pub fn url(&self) -> Retained<NSURL> {
         unsafe { msg_send_id![self, url] }
     }
     pub fn set_url(&self, url: &NSURL) {
@@ -158,7 +158,7 @@ declare!(BinaryArchive);
 impl Label for BinaryArchive {}
 impl BinaryArchive {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [M] addComputePipelineFunctionsWithDescriptor:error
@@ -183,7 +183,7 @@ impl BinaryArchive {
         //         Ok(())
         //     } else {
         //         println!("ppo[s] it");
-        //         let error: Id<NSError> =
+        //         let error: Retained<NSError> =
         //             Id::retain_autoreleased(raw_error).expect(ID_RETAIN_AUTO_FAILURE);
         //         // Err(error.localizedDescription())
         //         Err(NSString::from_str("oops"))

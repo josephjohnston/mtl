@@ -33,11 +33,17 @@ pub fn gen() {
         ],
     );
     w.lines(vec![
-        format!("uint array[{S}];"),
-        format!("uint acc[{S}] = {{0}};"),
-        format!("ushort g = w_global >> {LOG_W};"),
+        format!("// holds the values read and undergoing reduction"),
+        format!("{OUTPUT_TYPE} array[{S}];"),
+        format!("// the accumulator holding the current dot product"),
+        format!("{OUTPUT_TYPE} acc[{S}] = {{0}};"),
+        format!("// the warp set index (LSBs of w_global)"),
         format!("ushort w = w_global & ({W} - 1);"),
+        format!("// index of the warp in the warp set (MSBs of w_global)"),
+        format!("ushort g = w_global >> {LOG_W};"),
+        format!("// thread index within the warp set"),
         format!("ushort tau = w * {X} + t_local;"),
+        format!("// global reading address prefix in terms of e,g,t with f,s incorporated later"),
         format!(
             "uint global_read_index_prefix = {};",
             get_index("e", "0", "g", "0", "tau")
@@ -46,13 +52,15 @@ pub fn gen() {
     w.empty_line()
         .begin_for(format!("ushort f = 0"), format!("f < {F}"), format!("f++"));
     {
+        // // rolled
         // read_code(&mut w, false);
         // decompose_with_chain(&mut w, false, false, false, false);
         // collect_into_threads_code(&mut w, false, false);
-        // // schoolbook_multiplication_code(&mut w, false, false, false);
-        // karatsuba_multiplication_code(&mut w, false, false, false, false);
+        // schoolbook_multiplication_code(&mut w, false, false, false);
+        // // karatsuba_multiplication_code(&mut w, false, false, false, false);
         // // dual_karatsuba_multiplication_code(&mut w, false, false, false);
 
+        // unrolled
         read_code(&mut w, true);
         decompose_with_chain(&mut w, true, true, true, true);
         collect_into_threads_code(&mut w, true, true);
@@ -70,7 +78,7 @@ fn read_code(w: &mut LibraryWriter, unroll: bool) {
     w.comment(format!("READ INPUT"));
     let write_integrand = |w: &mut LibraryWriter, s: &str| {
         w.line(format!(
-            "array[{s}] = uint(input[global_read_index_prefix + {}]);",
+            "array[{s}] = {OUTPUT_TYPE}(input[global_read_index_prefix + {}]);",
             get_index("0", "0", "0", s, "0")
         ));
     };
@@ -89,10 +97,13 @@ fn read_code(w: &mut LibraryWriter, unroll: bool) {
         }
         w.end_for();
     }
-    w.line(format!(
-        "global_read_index_prefix += {};",
-        get_index("0", "1", "0", "0", "0")
-    ));
+    w.lines(vec![
+        format!("// update global reading prefix for an incremented f"),
+        format!(
+            "global_read_index_prefix += {};",
+            get_index("0", "1", "0", "0", "0")
+        ),
+    ]);
 }
 
 fn decompose_with_chain(
@@ -549,9 +560,7 @@ fn schoolbook_multiplication_code(
             w.end_for();
         }
     };
-    w.line(format!(
-        "uint minors[{T_J} * {S} / (1 << {K})] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752, 3198863462}};"
-    ));
+    w.line(format!("uint minors[{T_J} * {S} / (1 << {K})] = {{3614796953, 1208427060, 1889015752, 3198863462, 3614796953, 1208427060, 1889015752, 3198863462,}};"));
     if unroll_u {
         for u in 0..(1 << K) / T_J {
             w.begin_scope();
@@ -1329,7 +1338,7 @@ fn dual_karatsuba_multiplication_code(
     };
     add_to_acc(w);
     w.line(format!(
-        "uint minors[{}] = {{1, 0}};",
+        "uint minors[{}] = {{3614796953, 3614796953, 1889015752, 1889015752, 1208427060, 1208427060, 3198863462, 3198863462}};",
         // 8: {{3614796953, 3614796953, 1889015752, 1889015752, 1208427060, 1208427060, 3198863462, 3198863462}}
         // 4: {{3614796953, 1889015752, 1208427060, 3198863462}}
         // "uint minors[{}] = {{3614796953, 1889015752, 1208427060, 3198863462}};",
@@ -1365,7 +1374,7 @@ fn write_output_code(w: &mut LibraryWriter) {
     //     .end_scope();
     for s in 0..S {
         w.line(format!(
-            "output[{}] = acc[{s}];",
+            "oops output[{}] = acc[{s}];",
             get_index("e", "0", "g", &format!("{s}"), "tau")
         ));
     }

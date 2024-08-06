@@ -1,99 +1,87 @@
 use super::*;
 
-// [Pr] MTLIOCommandBuffer
-mod io_command_buffer;
-pub use io_command_buffer::*;
-
-// type *NSErrorDomain = NSString;
-// type CommandBufferErrorDomain = NSErrorDomain;
-
-// [E] CommandBufferError
-#[repr(usize)]
-pub enum CommandBufferError {
-    None = 0,
-    Internal = 1,
-    Timeout = 2,
-    PageFault = 3,
-    AccessRevoked = 4,
-    NotPermitted = 7,
-    OutOfMemory = 8,
-    InvalidResource = 9,
-    Memoryless = 10,
-    // iOS unavailable
-    DeviceRemoved = 11,
-    // iOS only 15.0+
-    StackOverflow = 12,
-}
-
-// API_AVAILABLE(macos(11.0), ios(14.0))
-// MTL_EXTERN NSErrorUserInfoKey const MTLCommandBufferEncoderInfoErrorKey;
-
-// [E] CommandBufferErrorOption
-// iOS only 14.0+
-#[repr(usize)]
-pub enum CommandBufferErrorOption {
-    None = 0,
-    EncoderExecutionStatus = 1 << 0,
-}
-unsafe impl Encode for CommandBufferErrorOption {
-    const ENCODING: Encoding = usize::ENCODING;
-}
-
-// [E] MTLCommandEncoderErrorState
-// iOS only 14.0+
-#[repr(isize)]
-pub enum CommandEncoderErrorState {
-    Unknown = 0,
-    Completed = 1,
-    Affected = 2,
-    Pending = 3,
-    Faulted = 4,
-}
-unsafe impl Encode for CommandEncoderErrorState {
-    const ENCODING: Encoding = isize::ENCODING;
-}
-
-// [Pr] CommandBufferEncoderInfo
-// iOS only 14.0+
-declare!(CommandBufferEncoderInfo);
-
-/// # Inspecting Execution Information
-impl CommandBufferEncoderInfo {
-    // // [P] label and setLable:
-    // pub fn label(&self) -> Id<NSString, Shared> {
-    //     unsafe { Id::retain(msg_send![self, label]).expect(ID_RETAIN_FAILURE) }
-    // }
-    // pub fn set_label(&self, label: &str) {
-    //     unsafe { msg_send![self, setLabel: NSString::from_str(label).as_ref()] }
-    // }
-    // [P] debugSignposts
-    // pub fn debug_signposts(&self) -> Id<NSArray<*mut NSString>, Shared> {
-    //     unsafe {
-    //         let raw_array: *mut NSArray<*mut NSString> = msg_send![self, debugSignposts];
-    //         Id::retain(raw_array).expect(ID_RETAIN_FAILURE)
-    //     }
-    // }
-    // [P] errorState
-    pub fn error_state(&self) -> CommandEncoderErrorState {
-        unsafe { msg_send![self, errorState] }
+// [C] MTLCommandBufferDescriptor
+declare!(CommandBufferDescriptor);
+impl CommandBufferDescriptor {
+    pub fn new() -> Retained<CommandBufferDescriptor> {
+        unsafe { msg_send_id![class!(MTLCommandBufferDescriptor), new] }
+    }
+    // [P] retainedReferences and setRetainedReferences
+    pub fn retained_references(&self) -> bool {
+        unsafe { Bool::as_bool(msg_send![self, retainedReferences]) }
+    }
+    pub fn set_retained_references(&self, retain_references: bool) {
+        unsafe { msg_send![self, setRetainedReferences: Bool::new(retain_references)] }
+    }
+    // [P] errorOptions and setErrorOptions
+    pub fn error_options(&self) -> CommandBufferErrorOption {
+        unsafe { msg_send![self, errorOptions] }
+    }
+    pub fn set_error_options(&self, error_options: CommandBufferErrorOption) {
+        unsafe { msg_send![self, setErrorOptions: error_options] }
     }
 }
-
-// If the command buffer has errorOptions CommandBufferErrorOption::EncoderExecutionStatus,
-// then on the event of an error, the command buffer's error field is an NSError with userInfo field an NSDictionary with the MTLCommandBufferEncoderInfoErrorKey key yielding a MTLCommandBufferEncoderInfo instance.
-
-mod descriptor;
-pub use descriptor::*;
 
 // [Pr] MTLCommandBuffer
 declare!(CommandBuffer);
 
-// Creating Command Encoders
+// [Pr] MTLEvent
+declare!(Event);
+impl Label for Event {}
+impl Event {
+    pub fn device(&self) -> Retained<Device> {
+        unsafe { msg_send_id![self, device] }
+    }
+}
 
-mod creating_encoders;
-pub use creating_encoders::*;
+// Submitting a Command Buffer
+impl CommandBuffer {
+    // [M] enqueue
+    pub fn enqueue(&self) {
+        unsafe { msg_send![self, enqueue] }
+    }
+    // [M] commit
+    pub fn commit(&self) {
+        unsafe { msg_send![self, commit] }
+    }
+}
 
-// Troubleshooting a Command Buffer
+// Synchronizing Passes With Events
+impl CommandBuffer {
+    // [M] encodeWaitForEvent:value:
+    pub fn encode_wait_for_event(&self, event: &Event, value: u64) {
+        unsafe { msg_send![self, encodeWaitForEvent: event, value: value] }
+    }
+    // [M] encodeSignalEvent:value:
+    pub fn encode_signal_event(&self, event: &Event, value: u64) {
+        unsafe { msg_send![self, encodeSignalEvent: event, value: value] }
+    }
+}
+
+// Waiting for State Changes
+impl CommandBuffer {
+    // [M] waitUntilScheduled
+    pub fn wait_until_scheduled(&self) {
+        unsafe { msg_send![self, waitUntilScheduled] }
+    }
+    // [M] waitUntilCompleted
+    pub fn wait_until_completed(&self) {
+        unsafe { msg_send![self, waitUntilCompleted] }
+    }
+}
+
+// Registering State Change Handlers
+pub type CommandBufferHandler<'a> = block::Block<(&'a CommandBuffer,), ()>;
+impl CommandBuffer {
+    // [P] addScheduledHandler
+    pub fn add_scheduled_handler(&self, block: &CommandBufferHandler) {
+        unsafe { msg_send![self, addScheduledHandler: block] }
+    }
+    // [P] addCompletedHandler:
+    pub fn add_completed_handler(&self, block: &CommandBufferHandler) {
+        unsafe { msg_send![self, addCompletedHandler: block] }
+    }
+}
 
 // [E] CommandBufferStatus
 #[repr(usize)]
@@ -114,19 +102,18 @@ impl CommandBuffer {
     }
 }
 
+// Creating Command Encoders
+mod creating_encoders;
+pub use creating_encoders::*;
+
 // Command Buffer Debugging
-
 mod debugging;
-// use debugging::*;
+pub use debugging::*;
 
-// Other
-
-mod other;
-pub use other::*;
-
-// https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ErrorHandlingCocoa/ErrorObjectsDomains/ErrorObjectsDomains.html#//apple_ref/doc/uid/TP40001806-CH202-CJBGAIBJ
+// // [Pr] MTLIOCommandBuffer
+// mod io_command_buffer;
+// pub use io_command_buffer::*;
 
 // Indirect Command Buffers
-
 mod indirect;
 pub use indirect::*;

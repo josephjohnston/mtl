@@ -11,7 +11,7 @@ impl_encode_for_type!(IndirectCommandType: usize);
 // [C] MTLIndirectCommandBufferDescriptor
 declare!(IndirectCommandBufferDescriptor);
 impl IndirectCommandBufferDescriptor {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLIndirectCommandBufferDescriptor), new] }
     }
     // [P] commandTypes and setCommandTypes
@@ -45,7 +45,10 @@ impl IndirectCommandBuffer {
         unsafe { msg_send![self, size] }
     }
     // [M] indirectComputeCommandAtIndex:
-    pub fn indirect_compute_command_at_index(&self, index: usize) -> Id<IndirectComputeCommand> {
+    pub fn indirect_compute_command_at_index(
+        &self,
+        index: usize,
+    ) -> Retained<IndirectComputeCommand> {
         unsafe { msg_send_id![self, indirectComputeCommandAtIndex: index] }
     }
     // [M] resetWithRange:

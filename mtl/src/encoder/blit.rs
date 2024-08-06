@@ -11,11 +11,13 @@ impl_encode_for_type!(BlitOption: usize);
 declare!(BlitPassDescriptor);
 impl BlitPassDescriptor {
     // [M] blitPassDescriptor
-    pub fn blit_pass_descriptor() -> Id<BlitPassDescriptor> {
+    pub fn blit_pass_descriptor() -> Retained<BlitPassDescriptor> {
         unsafe { msg_send_id![class!(MTLBlitPassDescriptor), blitPassDescriptor] }
     }
     // [P] sampleBufferAttachments
-    pub fn sample_buffer_attachments(&self) -> Id<BlitPassSampleBufferAttachmentDescriptorArray> {
+    pub fn sample_buffer_attachments(
+        &self,
+    ) -> Retained<BlitPassSampleBufferAttachmentDescriptorArray> {
         unsafe { msg_send_id![self, sampleBufferAttachments] }
     }
 }

@@ -1,27 +1,5 @@
 use super::*;
 
-mod counter;
-pub use counter::*;
-
-// [Pr] MTLFence
-declare!(Fence);
-impl Label for Fence {}
-impl Fence {
-    pub fn device(&self) -> Id<Device> {
-        unsafe { msg_send_id![self, device] }
-    }
-}
-
-// [E] MTLResourceUsage
-#[repr(usize)]
-pub enum ResourceUsage {
-    Read = 1 << 0,
-    Write = 1 << 1,
-}
-unsafe impl Encode for ResourceUsage {
-    const ENCODING: Encoding = usize::ENCODING;
-}
-
 // [Pr] MTLCommandEncoder
 pub trait CommandEncoder
 where
@@ -52,11 +30,32 @@ where
 mod compute;
 pub use compute::*;
 
+// Blit Passes
+mod blit;
+pub use blit::*;
+
+// Indirect Command Encoding
 mod indirect;
 pub use indirect::*;
 
-// mod render;
-// pub use render::*;
+mod counter;
+pub use counter::*;
 
-mod blit;
-pub use blit::*;
+// [Pr] MTLFence
+declare!(Fence);
+impl Label for Fence {}
+impl Fence {
+    pub fn device(&self) -> Retained<Device> {
+        unsafe { msg_send_id![self, device] }
+    }
+}
+
+// [E] MTLResourceUsage
+#[repr(usize)]
+pub enum ResourceUsage {
+    Read = 1 << 0,
+    Write = 1 << 1,
+}
+unsafe impl Encode for ResourceUsage {
+    const ENCODING: Encoding = usize::ENCODING;
+}

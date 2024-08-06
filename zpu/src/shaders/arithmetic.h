@@ -57,56 +57,29 @@
 //     // constexpr bool operator!=(Fp rhs) device const { return val != rhs.val; }
 // };
 
-//
-
-static const constant uint P = 4278255361;
+// static const constant uint P = 4278255361;
 static const constant uint EPSILON = (1 << 24) - (1 << 16) + (1 << 8) - (1 << 0);
-
-// inline uint mul(uint a, uint b)
-// {
-//     return uint((ulong(a) * ulong(b)) % P);
-// }
-
-// inline uint add(uint a, uint b)
-// {
-//     return uint((ulong(a) + ulong(b)) % P);
-//     // return a + b;
-// }
-
-// inline uint sub(uint a, uint b)
-// {
-//     return uint((ulong(a) - ulong(b) + P) % P);
-//     // return a - b;
-// }
 
 inline constexpr uint mul(uint a, uint b)
 {
-    // ushort x = a * 309423904;
-    // ushort y = b * 203942034;
-    // return x * y;
-    // return a * b;
+    // C80
     ulong c = ulong(a) * ulong(b);
     uint bottom = uint(c);
-    // let mid = ((c << (64 - 40)) >> (64 - 8)) as u32;
     uint top = uint(c >> 32);
+
     uint low = bottom;
     uint mid = top & ((1 << 8) - 1);
-    // let high = (c >> 40) as u32;
     uint high = top >> 8;
-
-    uint prod = (mid << 16) + mid;
-    prod = (prod << 8) - prod;
-
-    // let mut prod = mid << 16;
-    // prod += prod >> 16;
-    // prod = prod << 8;
-    // prod -= prod >> 8;
 
     uint diff = low - high;
     if (high > low)
     {
         diff -= EPSILON;
     }
+
+    uint prod = (mid << 16) + mid;
+    prod = (prod << 8) - prod;
+
     uint result = diff + prod;
     if (result < prod)
     {

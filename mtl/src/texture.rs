@@ -5,10 +5,10 @@ declare!(TextureDescriptor);
 
 /// # Creating Texture Descriptors
 impl TextureDescriptor {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe {
             let raw_desc = msg_send_id![class!(MTLTextureDescriptor), alloc];
-            let desc: Id<Self> = msg_send_id![raw_desc, init];
+            let desc: Retained<Self> = msg_send_id![raw_desc, init];
             desc
         }
     }
@@ -126,11 +126,14 @@ impl Texture {
 /// # Creating Textures by Reinterpreting Existing Texture Data
 impl Texture {
     // [M] newTextureViewWithPixelFormat
-    pub fn new_texture_view_with_pixel_format(&self, pixel_format: PixelFormat) -> Id<Texture> {
+    pub fn new_texture_view_with_pixel_format(
+        &self,
+        pixel_format: PixelFormat,
+    ) -> Retained<Texture> {
         unsafe {
             let raw_texture: *mut Texture =
                 msg_send![self, newTextureViewWithPixelFormat: pixel_format];
-            Id::new(raw_texture).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_texture).expect(ID_NEW_FAILURE)
         }
     }
     // [M] newTextureViewWithPixelFormat:textureType:levels:slices:
@@ -140,7 +143,7 @@ impl Texture {
         texture_type: TextureType,
         levels: NSRange,
         slices: NSRange,
-    ) -> Id<Texture> {
+    ) -> Retained<Texture> {
         unsafe {
             let raw_texture: *mut Texture = msg_send![
                 self,
@@ -149,7 +152,7 @@ impl Texture {
                 levels: levels,
                 slices: slices
             ];
-            Id::new(raw_texture).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_texture).expect(ID_NEW_FAILURE)
         }
     }
 }

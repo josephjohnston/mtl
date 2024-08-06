@@ -3,10 +3,10 @@ use super::*;
 declare!(HeapDescriptor);
 
 impl HeapDescriptor {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe {
             let raw_desc = msg_send_id![class!(MTLHeapDescriptor), alloc];
-            let desc: Id<Self> = msg_send_id![raw_desc, init];
+            let desc: Retained<Self> = msg_send_id![raw_desc, init];
             desc
         }
     }

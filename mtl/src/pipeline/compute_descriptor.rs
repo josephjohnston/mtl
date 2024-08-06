@@ -4,14 +4,14 @@ use super::*;
 declare!(ComputePipelineDescriptor);
 impl Label for ComputePipelineDescriptor {}
 impl ComputePipelineDescriptor {
-    pub fn new() -> Id<ComputePipelineDescriptor> {
+    pub fn new() -> Retained<ComputePipelineDescriptor> {
         unsafe {
             let class = class!(MTLComputePipelineDescriptor);
-            Id::new(msg_send![class, new]).expect(ID_NEW_FAILURE)
+            Retained::from_raw(msg_send![class, new]).expect(ID_NEW_FAILURE)
         }
     }
     // [P] computeFunction and setComputeFunction
-    pub fn compute_function(&self) -> Id<Function> {
+    pub fn compute_function(&self) -> Retained<Function> {
         unsafe { msg_send_id![self, computeFunction] }
     }
     pub fn set_compute_function(&self, function: &Function) {
@@ -49,14 +49,14 @@ impl ComputePipelineDescriptor {
         unsafe { msg_send![self, setMaxCallStackDepth: value] }
     }
     // [P] stageInputDescriptor and setStageInputDescriptor
-    pub fn stage_input_descriptor(&self) -> Option<Id<StageInputOutputDescriptor>> {
+    pub fn stage_input_descriptor(&self) -> Option<Retained<StageInputOutputDescriptor>> {
         unsafe { msg_send_id![self, stageInputDescriptor] }
     }
     pub fn set_stage_input_descriptor(&self, input_descriptor: &StageInputOutputDescriptor) {
         unsafe { msg_send![self, setStageInputDescriptor: input_descriptor] }
     }
     // [P] buffers
-    pub fn buffers(&self) -> Id<PipelineBufferDescriptorArray> {
+    pub fn buffers(&self) -> Retained<PipelineBufferDescriptorArray> {
         unsafe { msg_send_id![self, buffers] }
     }
     // [P] supportIndirectCommandBuffers and setSupportIndirectCommandBuffers:
@@ -71,14 +71,14 @@ impl ComputePipelineDescriptor {
         unsafe { msg_send![self, reset] }
     }
     // [P] preloadedLibraries:
-    pub fn preloaded_libraries(&self) -> Id<NSArray<DynamicLibrary>> {
+    pub fn preloaded_libraries(&self) -> Retained<NSArray<DynamicLibrary>> {
         unsafe { msg_send_id![self, preloadedLibraries] }
     }
     pub fn set_preloaded_libraries(&self, libraries: &NSArray<DynamicLibrary>) {
         unsafe { msg_send![self, setPreloadedLibraries: libraries] }
     }
     // [P] linkedFunctions and setLinkedFunctions:
-    pub fn linked_functions(&self) -> Id<LinkedFunctions> {
+    pub fn linked_functions(&self) -> Retained<LinkedFunctions> {
         unsafe { msg_send_id![self, linkedFunctions] }
     }
     pub fn set_linked_functions(&self, linked_functions: &LinkedFunctions) {
@@ -92,7 +92,7 @@ impl ComputePipelineDescriptor {
         unsafe { msg_send![self, setSupportAddingBinaryFunctions: value] }
     }
     // [P] binaryArchives and setBinaryArchives
-    pub fn binary_archives(&self) -> Id<NSArray<BinaryArchive>> {
+    pub fn binary_archives(&self) -> Retained<NSArray<BinaryArchive>> {
         unsafe { msg_send_id![self, binaryArchives] }
     }
     pub fn set_binary_archives(&self, archives: &NSArray<BinaryArchive>) {

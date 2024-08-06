@@ -16,7 +16,7 @@ declare!(Resource);
 impl Label for Resource {}
 impl Resource {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
 }
@@ -52,7 +52,7 @@ impl Resource {
 /// # Managing Heap Resources
 impl Resource {
     // [P] heap
-    pub fn heap(&self) -> Id<Heap> {
+    pub fn heap(&self) -> Retained<Heap> {
         unsafe { msg_send_id![self, heap] }
     }
     // [P] heapOffset

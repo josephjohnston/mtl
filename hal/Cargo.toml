@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 mtl = { package = "mtl", path = "../mtl" }
-objc = { package = "objc2", version = "=0.3.0-beta.3" }
-# icrate = { version = "0.0.1", features = ["Foundation"] }
-block = { package = "block2", version="0.2.0-alpha.6" }
+objc = { package = "objc2", version = "0.5.2" }
+objc_foundation = { package = "objc2-foundation", version = "0.2.2", features = [
+    "all",
+] }
+block = { package = "block2", version = "0.4.0" }
 half = "2.1.0"
-

@@ -117,6 +117,7 @@ impl_encode_for_type!(DataType: usize);
 
 // [E] MTLFunctionType
 #[repr(usize)]
+#[derive(Debug)]
 pub enum FunctionType {
     Vertex = 1,
     Fragment = 2,
@@ -140,7 +141,7 @@ impl_encode_for_type!(FunctionOptions: usize);
 declare!(FunctionConstant);
 impl FunctionConstant {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] type
@@ -160,7 +161,7 @@ impl FunctionConstant {
 // [C] MTLFunctionConstantValues
 declare!(FunctionConstantValues);
 impl FunctionConstantValues {
-    pub fn new() -> Id<Self> {
+    pub fn new() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLFunctionConstantValues), new] }
     }
     // [M] setConstantValue:type:atIndex:
@@ -216,25 +217,25 @@ impl FunctionConstantValues {
 declare!(FunctionDescriptor);
 impl FunctionDescriptor {
     // [M] functionDescriptor
-    pub fn function_descriptor() -> Id<Self> {
+    pub fn function_descriptor() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLFunctionDescriptor), functionDescriptor] }
     }
     // [P] name and setName
-    pub fn name(&self) -> Option<Id<NSString>> {
+    pub fn name(&self) -> Option<Retained<NSString>> {
         unsafe { msg_send_id![self, name] }
     }
     pub fn set_name(&self, name: &NSString) {
         unsafe { msg_send![self, setName: name] }
     }
     // [P] specializedName and setSpecializedName
-    pub fn specialized_name(&self) -> Option<Id<NSString>> {
+    pub fn specialized_name(&self) -> Option<Retained<NSString>> {
         unsafe { msg_send_id![self, specializedName] }
     }
     pub fn set_specialized_name(&self, specialized_name: &NSString) {
         unsafe { msg_send![self, setSpecializedName: specialized_name] }
     }
     // [P] constantValues and setConstantValues
-    pub fn constant_values(&self) -> Id<FunctionConstantValues> {
+    pub fn constant_values(&self) -> Retained<FunctionConstantValues> {
         unsafe { msg_send_id![self, constantValues] }
     }
     pub fn set_constant_values(&self, constant_values: &FunctionConstantValues) {
@@ -248,7 +249,7 @@ impl FunctionDescriptor {
         unsafe { msg_send![self, setOptions: options] }
     }
     // [P] binaryArchives and setBinaryArchives
-    pub fn binary_archives(&self) -> Option<Id<NSArray<BinaryArchive>>> {
+    pub fn binary_archives(&self) -> Option<Retained<NSArray<BinaryArchive>>> {
         unsafe { msg_send_id![self, binaryArchives] }
     }
     pub fn set_binary_archives(&self, archives: &NSArray<BinaryArchive>) {
@@ -261,11 +262,11 @@ declare!(Function);
 impl Label for Function {}
 impl Function {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] functionType
@@ -277,13 +278,13 @@ impl Function {
         unsafe { msg_send![self, options] }
     }
     // // [P] shaderInputAttributes
-    // pub fn stage_input_attributes(&self) -> Id<NSArray<*mut Attribute>> {
+    // pub fn stage_input_attributes(&self) -> Retained<NSArray<*mut Attribute>> {
     //     unsafe { msg_send_id![self, shaderInputAttributes] }
     // }
     // // [P] functionConstantsDictionary
     // pub fn function_constants_dictionary(
     //     &self,
-    // ) -> Id<NSDictionary<*mut NSString, *mut FunctionConstant>> {
+    // ) -> Retained<NSDictionary<*mut NSString, *mut FunctionConstant>> {
     //     unsafe {
     //         let dictionary = msg_send_id![self, functionConstantsDictionary];
     //     }
@@ -294,11 +295,11 @@ impl Function {
 declare!(FunctionHandle);
 impl FunctionHandle {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
     // [P] functionType
@@ -311,7 +312,7 @@ impl FunctionHandle {
 declare!(VisibleFunctionTableDescriptor);
 impl VisibleFunctionTableDescriptor {
     // [M] visibleFunctionTableDescriptor
-    pub fn visible_function_table_descriptor() -> Id<Self> {
+    pub fn visible_function_table_descriptor() -> Retained<Self> {
         unsafe {
             msg_send_id![
                 class!(MTLVisibleFunctionTableDescriptor),
@@ -349,18 +350,18 @@ impl VisibleFunctionTable {
 declare!(LinkedFunctions);
 impl LinkedFunctions {
     // [M] linkedFunctions
-    pub fn linked_functions() -> Id<Self> {
+    pub fn linked_functions() -> Retained<Self> {
         unsafe { msg_send_id![class!(MTLLinkedFunctions), linkedFunctions] }
     }
     // [P] functions and setFunctions
-    pub fn functions(&self) -> Option<Id<NSArray<Function>>> {
+    pub fn functions(&self) -> Option<Retained<NSArray<Function>>> {
         unsafe { msg_send_id![self, functions] }
     }
     pub fn set_functions(&self, functions: &NSArray<Function>) {
         unsafe { msg_send![self, setFunctions: functions] }
     }
     // [P] binaryFunctions and setBinaryFunctions
-    pub fn binary_functions(&self) -> Option<Id<NSArray<Function>>> {
+    pub fn binary_functions(&self) -> Option<Retained<NSArray<Function>>> {
         unsafe { msg_send_id![self, binaryFunctions] }
     }
     pub fn set_binary_functions(&self, binary_functions: &NSArray<Function>) {
@@ -374,7 +375,7 @@ impl LinkedFunctions {
 // declare!(VisibleFunctionTableDescriptor);
 // impl VisibleFunctionTableDescriptor {
 //     // [M] visibleFunctionTableDescriptor
-//     pub fn visible_function_table_descriptor() -> Id<Self> {
+//     pub fn visible_function_table_descriptor() -> Retained<Self> {
 //         unsafe {
 //             msg_send_id![
 //                 class!(MTLVisibleFunctionTableDescriptor),

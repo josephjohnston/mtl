@@ -29,7 +29,7 @@ impl PipelineBufferDescriptor {
 declare!(PipelineBufferDescriptorArray);
 impl PipelineBufferDescriptorArray {
     // [M] objectAtIndexSubscript:
-    pub fn object_at_indexed_subscript(&self, index: usize) -> Id<PipelineBufferDescriptor> {
+    pub fn object_at_indexed_subscript(&self, index: usize) -> Retained<PipelineBufferDescriptor> {
         unsafe { msg_send_id![self, objectAtIndexedSubscript: index] }
     }
     // [M] setObject:atIndexedSubscript:

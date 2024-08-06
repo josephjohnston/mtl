@@ -2,8 +2,8 @@ use super::*;
 
 impl Device {
     // [M] newDefaultLibrary
-    pub fn new_default_library(&self) -> Id<Library> {
-        unsafe { Id::new(msg_send![self, newDefaultLibrary]).expect(ID_NEW_FAILURE) }
+    pub fn new_default_library(&self) -> Retained<Library> {
+        unsafe { Retained::from_raw(msg_send![self, newDefaultLibrary]).expect(ID_NEW_FAILURE) }
     }
     // [M] newDefaultLibraryWithBundle:error:
     // [M] newLibraryWithURL:error:
@@ -14,11 +14,11 @@ impl Device {
             let raw_t: *mut Library =
                 msg_send![self, newLibraryWithURL: url, error: &mut raw_error];
             if raw_error.is_null() {
-                Ok(Id::new(raw_t).expect(ID_NEW_FAILURE))
+                Ok(Retained::from_raw(raw_t).expect(ID_NEW_FAILURE))
             } else {
-                let error: Id<NSError> =
-                    Id::retain_autoreleased(raw_error).expect(ID_RETAIN_AUTO_FAILURE);
-                Err(error.localized_description())
+                let error: Retained<NSError> =
+                    Retained::retain_autoreleased(raw_error).expect(ID_RETAIN_AUTO_FAILURE);
+                Err(error.localizedDescription())
             }
         }
     }

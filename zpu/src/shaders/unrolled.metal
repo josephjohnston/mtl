@@ -2,7 +2,7 @@
 #include "arithmetic.h"
 
 kernel void go(
-    device uint *input,
+    device uchar *input,
     threadgroup uint *shared,
     device uint *output,
     device uint *constants,
@@ -10,41 +10,48 @@ kernel void go(
     ushort w_global [[simdgroup_index_in_threadgroup]],
     ushort t_local [[thread_index_in_simdgroup]])
 {
+    // holds the values read and undergoing reduction
     uint array[8];
+    // the accumulator holding the current dot product
     uint acc[8] = {0};
-    ushort g = w_global >> 2;
+    // the warp set index (LSBs of w_global)
     ushort w = w_global & (4 - 1);
+    // index of the warp in the warp set (MSBs of w_global)
+    ushort g = w_global >> 2;
+    // thread index within the warp set
     ushort tau = w * 32 + t_local;
-    uint global_read_index_prefix = e * 1024 + 0 * 1024 + g * 1024 + 0 * 128 + tau * 1;
+    // global reading address prefix in terms of e,g,t with f,s incorporated later
+    uint global_read_index_prefix = e * 131072 + 0 * 1024 + g * 1024 + 0 * 128 + tau * 1;
     
-    for (ushort f = 0; f < 1; f++)
+    for (ushort f = 0; f < 128; f++)
     {
         // READ INPUT
         {
-            array[0] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 0 * 128 + 0 * 1]);
+            array[0] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 0 * 128 + 0 * 1]);
         }
         {
-            array[1] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 1 * 128 + 0 * 1]);
+            array[1] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 1 * 128 + 0 * 1]);
         }
         {
-            array[2] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 2 * 128 + 0 * 1]);
+            array[2] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 2 * 128 + 0 * 1]);
         }
         {
-            array[3] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 3 * 128 + 0 * 1]);
+            array[3] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 3 * 128 + 0 * 1]);
         }
         {
-            array[4] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 4 * 128 + 0 * 1]);
+            array[4] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 4 * 128 + 0 * 1]);
         }
         {
-            array[5] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 5 * 128 + 0 * 1]);
+            array[5] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 5 * 128 + 0 * 1]);
         }
         {
-            array[6] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 6 * 128 + 0 * 1]);
+            array[6] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 6 * 128 + 0 * 1]);
         }
         {
-            array[7] = uint(input[global_read_index_prefix + 0 * 1024 + 0 * 1024 + 0 * 1024 + 7 * 128 + 0 * 1]);
+            array[7] = uint(input[global_read_index_prefix + 0 * 131072 + 0 * 1024 + 0 * 1024 + 7 * 128 + 0 * 1]);
         }
-        global_read_index_prefix += 0 * 1024 + 1 * 1024 + 0 * 1024 + 0 * 128 + 0 * 1;
+        // update global reading prefix for an incremented f
+        global_read_index_prefix += 0 * 131072 + 1 * 1024 + 0 * 1024 + 0 * 128 + 0 * 1;
         
         // DECOMPOSE WITH CHAIN
         {
@@ -895,7 +902,7 @@ kernel void go(
     // WRITE OUTPUT
     ushort gamma = t_local >> (5 - 3);
     ushort delta = t_local & (32 / 8 - 1);
-    uint shared_write_index_prefix = (e * 1024 + 0 * 1024 + g * 1024 + 0 * 128 + 0 * 1) + w * 32 * 8 + gamma * 32 + delta * 8;
+    uint shared_write_index_prefix = (e * 131072 + 0 * 1024 + g * 1024 + 0 * 128 + 0 * 1) + w * 32 * 8 + gamma * 32 + delta * 8;
     {
         ushort index = (gamma + 0) & (8 - 1);
         output[shared_write_index_prefix + index] = acc[index];

@@ -5,12 +5,12 @@ declare!(ComputePipelineReflection);
 impl ComputePipelineReflection {
     // [P] bindings
     // iOS only 16.0+
-    pub fn bindings(&self) -> Id<NSArray<Binding>> {
+    pub fn bindings(&self) -> Retained<NSArray<Binding>> {
         unsafe { msg_send_id![self, bindings] }
     }
 }
 // [T] MTLAutoreleasedComputePipelineReflection
-pub type AutoreleasedComputePipelineReflection = Id<ComputePipelineReflection>;
+pub type AutoreleasedComputePipelineReflection = Retained<ComputePipelineReflection>;
 // we'll just want a double pointer when using this as an arg, see about it then
 // arguments will be ComputePipelineReflection **
 
@@ -29,7 +29,7 @@ impl_encode_for_type!(BindingType: isize);
 declare!(Binding);
 impl Binding {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] index

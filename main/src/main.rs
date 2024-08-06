@@ -1,66 +1,66 @@
 // use hal::*;
 use zpu::*;
 
-// fn karat(
-//     k: usize,
-//     A: &Vec<u32>,
-//     off_A: usize,
-//     B: &Vec<u32>,
-//     off_B: usize,
-//     C: &Vec<u32>,
-//     off_C: usize,
-//     D: &mut Vec<u32>,
-//     off_D: usize,
-// ) {
-//     if k == 0 {
-//         D[0] = add(D[0], mul(add(A[0], B[0]), C[0]));
-//     }
-//     for i in 0..k {
-//         D[off_D + k + i] = add(D[off_D + k + i], D[off_D + i]);
-//         D[off_D + (3 * k - 1) + i] = add(
-//             add(A[off_A + i], A[off_A + k + i]),
-//             add(B[off_B + i], B[off_B + k + i]),
-//         );
-//     }
-//     karat(
-//         k / 2,
-//         C,
-//         off_C,
-//         C,
-//         off_C + k,
-//         D,
-//         off_D + (3 * k - 1),
-//         D,
-//         off_D + k,
-//     );
-//     for i in 0..k {
-//         D[off_D + (3 * k - 1) + i] = add(D[off_D + k + i], D[off_D + 2 * k + i]);
-//     }
-//     karat(k / 2, A, off_A, B, off_B, C, off_C, D, off_D);
-//     for i in 0..k {
-//         if i < k - 1 {
-//             D[off_D + 2 * k + i] = sub(D[off_D + 2 * k + i], D[off_D + k + i]);
-//         }
-//         D[off_D + k + i] = sub(D[off_D + (3 * k - 1) + i], D[off_D + i]);
-//     }
-//     karat(
-//         k / 2,
-//         A,
-//         off_A + k,
-//         B,
-//         off_B + k,
-//         C,
-//         off_C + k,
-//         D,
-//         off_D + 2 * k,
-//     );
-//     for i in 0..k {
-//         if i < k - 1 {
-//             D[off_D + 2 * k + i] = sub(D[off_D + 2 * k + i], D[off_D + 3 * k + i]);
-//         }
-//         D[off_D + k + i] = sub(D[off_D + k + i], D[off_D + 2 * k + i]);
-//     }
-// }
+fn karat(
+    k: usize,
+    A: &Vec<u32>,
+    off_A: usize,
+    B: &Vec<u32>,
+    off_B: usize,
+    C: &Vec<u32>,
+    off_C: usize,
+    D: &mut Vec<u32>,
+    off_D: usize,
+) {
+    if k == 0 {
+        D[0] = add(D[0], mul(add(A[0], B[0]), C[0]));
+    }
+    for i in 0..k {
+        D[off_D + k + i] = add(D[off_D + k + i], D[off_D + i]);
+        D[off_D + (3 * k - 1) + i] = add(
+            add(A[off_A + i], A[off_A + k + i]),
+            add(B[off_B + i], B[off_B + k + i]),
+        );
+    }
+    karat(
+        k / 2,
+        C,
+        off_C,
+        C,
+        off_C + k,
+        D,
+        off_D + (3 * k - 1),
+        D,
+        off_D + k,
+    );
+    for i in 0..k {
+        D[off_D + (3 * k - 1) + i] = add(D[off_D + k + i], D[off_D + 2 * k + i]);
+    }
+    karat(k / 2, A, off_A, B, off_B, C, off_C, D, off_D);
+    for i in 0..k {
+        if i < k - 1 {
+            D[off_D + 2 * k + i] = sub(D[off_D + 2 * k + i], D[off_D + k + i]);
+        }
+        D[off_D + k + i] = sub(D[off_D + (3 * k - 1) + i], D[off_D + i]);
+    }
+    karat(
+        k / 2,
+        A,
+        off_A + k,
+        B,
+        off_B + k,
+        C,
+        off_C + k,
+        D,
+        off_D + 2 * k,
+    );
+    for i in 0..k {
+        if i < k - 1 {
+            D[off_D + 2 * k + i] = sub(D[off_D + 2 * k + i], D[off_D + 3 * k + i]);
+        }
+        D[off_D + k + i] = sub(D[off_D + k + i], D[off_D + 2 * k + i]);
+    }
+}
 
 fn main() {
     // rust_addition();

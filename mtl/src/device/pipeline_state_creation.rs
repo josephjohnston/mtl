@@ -40,7 +40,7 @@ impl Device {
             ]
         }
     }
-    // By Function With Options and Reflection
+    // // By Function With Options and Reflection
     // // [M] newComputePipelineStateWithFunction:options:reflection:error:
     // pub fn new_compute_pipeline_state_with_function_reflection_error(
     //     &self,
@@ -84,7 +84,7 @@ impl Device {
         options: PipelineOption,
         // reflection: &AutoreleasedComputePipelineReflection,
     ) -> TryNewCatch<ComputePipelineState> {
-        let mut ptr: *mut Object = std::ptr::null_mut();
+        let mut ptr: *mut AnyObject = std::ptr::null_mut();
         try_new_catch!(
             raw_error<ComputePipelineState> => msg_send![
                 self,

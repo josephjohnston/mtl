@@ -45,7 +45,7 @@ impl GPUFamily {
 /// # Identifying a GPU Device
 impl Device {
     // [P] name
-    pub fn name(&self) -> Id<NSString> {
+    pub fn name(&self) -> Retained<NSString> {
         unsafe { msg_send_id![self, name] }
     }
     // [P] registryID
@@ -104,7 +104,7 @@ unsafe impl Encode for DeviceLocation {
 impl Device {
     // [P] maxThreadgroupMemoryLength
     pub fn max_threadgroup_memory_length(&self) -> usize {
-        unsafe { msg_send![self, maxTreadgroupMemoryLength] }
+        unsafe { msg_send![self, maxThreadgroupMemoryLength] }
     }
     // [P] maxThreadsPerThreadgroup
     pub fn max_threads_per_threadgroup(&self) -> Size {
@@ -169,8 +169,18 @@ impl Device {
 /// # Sampling a GPU Device's Counters
 impl Device {
     // [P] counterSets
-    pub fn counter_sets(&self) -> Vec<Id<CounterSet>> {
-        unsafe { NSArray::into_vec(msg_send_id![self, counterSets]) }
+    pub fn counter_sets(&self) -> Retained<NSArray<CounterSet>> {
+        // Vec<Retained<CounterSet>> {
+        unsafe {
+            let array: Retained<NSArray<CounterSet>> = msg_send_id![self, counterSets];
+            array
+            // array
+            //     .to_vec()
+            //     .into_iter()
+            //     .map(|x| x as *const CounterSet as *mut CounterSet)
+            //     .map(|x| Id::retain(x).unwrap())
+            //     .collect()
+        }
     }
     // [M] supportsCounterSampling:
     pub fn supports_counter_sampling(&self, sampling_point: CounterSamplingPoint) -> bool {
@@ -180,7 +190,7 @@ impl Device {
     pub fn new_counter_sample_buffer_with_descriptor(
         &self,
         counter_sample_buffer_descriptor: &CounterSampleBufferDescriptor,
-    ) -> Result<Id<CounterSampleBuffer>, Id<NSString>> {
+    ) -> Result<Retained<CounterSampleBuffer>, Retained<NSString>> {
         unsafe {
             let mut raw_error: *mut NSError = std::ptr::null_mut();
             let raw_id_t: *mut CounterSampleBuffer = msg_send![
@@ -189,11 +199,11 @@ impl Device {
                 error: &mut raw_error,
             ];
             if raw_error.is_null() {
-                Ok(Id::new(raw_id_t).expect(ID_NEW_FAILURE))
+                Ok(Retained::from_raw(raw_id_t).expect(ID_NEW_FAILURE))
             } else {
-                let error: Id<NSError> =
-                    Id::retain_autoreleased(raw_error).expect(ID_RETAIN_AUTO_FAILURE);
-                Err(error.localized_description())
+                let error: Retained<NSError> =
+                    Retained::retain_autoreleased(raw_error).expect(ID_RETAIN_AUTO_FAILURE);
+                Err(error.localizedDescription())
             }
         }
     }

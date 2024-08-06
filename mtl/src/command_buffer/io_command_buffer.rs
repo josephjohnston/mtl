@@ -26,5 +26,4 @@ impl IOCommandBuffer {
     }
 }
 
-//
 declare!(IOFileHandler);

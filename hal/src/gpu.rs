@@ -10,17 +10,25 @@ pub enum GPUType {
 
 #[derive(Debug)]
 pub struct GPUInfo {
-    id: Id<mtl::Device>,
+    id: Retained<mtl::Device>,
     pub name: String,
     pub gpu_type: GPUType,
 }
 
+fn get_gpu_resource_options() -> mtl::ResourceOptions {
+    mtl::ResourceOptions::new(
+        mtl::CPUCacheMode::WriteCombined,
+        mtl::StorageMode::Private,
+        mtl::HazardTrackingMode::Untracked,
+    )
+}
+
 #[derive(Debug)]
 pub struct GPU {
-    id: Id<mtl::Device>,
-    heap_desc: Id<mtl::HeapDescriptor>,
-    archive_desc: Id<mtl::BinaryArchiveDescriptor>,
-    multi_batch_desc: Id<mtl::IndirectCommandBufferDescriptor>,
+    id: Retained<mtl::Device>,
+    heap_desc: Retained<mtl::HeapDescriptor>,
+    archive_desc: Retained<mtl::BinaryArchiveDescriptor>,
+    multi_batch_desc: Retained<mtl::IndirectCommandBufferDescriptor>,
 }
 unsafe impl Send for GPU {}
 unsafe impl Sync for GPU {}
@@ -54,7 +62,7 @@ impl GPU {
     // #[cfg(target_os = "macos")]
     // pub fn current_gpus() -> Vec<GPUInfo> {
     //     let array = mtl::copy_all_devices();
-    //     let ids: Vec<Id<mtl::Device>> = (0..array.len())
+    //     let ids: Vec<Retained<mtl::Device>> = (0..array.len())
     //         .map(|index| unsafe { msg_send_id![&array, objectAtIndex: index] })
     //         .collect::<Vec<_>>();
     //     ids.into_iter()
@@ -65,12 +73,12 @@ impl GPU {
     //         })
     //         .collect()
     // }
-    pub fn new_timestamp_sampler(&self, sample_count: usize, private: bool) -> TimestampSampler {
-        TimestampSampler::new(&self.id, sample_count, private)
-    }
+    // pub fn new_timestamp_sampler(&self, sample_count: usize, private: bool) -> TimestampSampler {
+    //     TimestampSampler::new(&self.id, sample_count, private)
+    // }
     pub fn resource_usage(&self) {
         println!(
-            "{}, {}, {}",
+            "current_allocated_size: {}, recommended_max_working_set_size: {}, has_unified_memory: {}",
             self.id.current_allocated_size(),
             self.id.recommended_max_working_set_size(),
             self.id.has_unified_memory()
@@ -105,12 +113,7 @@ impl GPU {
     pub fn new_buffer<T>(&self, name: String, len: usize, readable: bool) -> Buffer<T, Shared> {
         Buffer::<T, Shared>::new(&self.id, name, len, readable)
     }
-    pub fn new_archive(
-        &self,
-        name: String,
-        serialize: bool,
-        shaders_url_str: &str, //String,
-    ) -> Archive {
+    pub fn new_archive(&self, name: String, serialize: bool, shaders_url_str: &str) -> Archive {
         Archive::new(
             &self.id,
             &self.archive_desc,
@@ -128,16 +131,13 @@ impl GPU {
     // pub fn simplified(&self, name: String) -> Result<Pipeline, String> {
     //     Archive::simplified(&self.id, &self.archive_desc, name)
     // }
-    // pub fn new_texture(&self) -> Id<mtl::Texture> {
-    // }
 }
 
 #[derive(Debug)]
 pub struct Queue {
-    id: Id<mtl::CommandQueue>,
+    id: Retained<mtl::CommandQueue>,
     pub name: String,
-    pub command_buffer_desc: Id<mtl::CommandBufferDescriptor>,
-    // device
+    pub command_buffer_desc: Retained<mtl::CommandBufferDescriptor>,
 }
 unsafe impl Send for Queue {}
 unsafe impl Sync for Queue {}
@@ -152,9 +152,9 @@ impl Queue {
             command_buffer_desc,
         }
     }
-    pub fn new_batch(&self, optimize: bool) -> Batch {
-        Batch::new(&self.id, &self.command_buffer_desc, optimize)
-    }
+    // pub fn new_batch(&self, optimize: bool) -> Batch {
+    //     Batch::new(&self.id, &self.command_buffer_desc, optimize)
+    // }
     pub(crate) fn get_ref(&self) -> &mtl::CommandBufferDescriptor {
         &*self.command_buffer_desc
     }
@@ -162,7 +162,7 @@ impl Queue {
 
 pub struct TimestampSampler<'a> {
     device: &'a mtl::Device,
-    sample_buffer: Id<mtl::CounterSampleBuffer>,
+    sample_buffer: Retained<mtl::CounterSampleBuffer>,
     sample_count: usize,
     next_start_index: usize,
     cpu_start_time: mtl::Timestamp,
@@ -171,82 +171,82 @@ pub struct TimestampSampler<'a> {
     // gpu_end_time: mtl::Timestamp,
 }
 impl<'a> TimestampSampler<'a> {
-    pub(crate) fn new(device: &'a mtl::Device, sample_count: usize, private: bool) -> Self {
-        assert!(device.supports_counter_sampling(mtl::CounterSamplingPoint::StageBoundary));
-        let counter_set = device
-            .counter_sets()
-            .into_iter()
-            .find(|counter_set| counter_set.name().to_string() == "timestamp")
-            .unwrap();
-        // fn get_counter_set() -> Option<Id<mtl::CounterSet>> {
-        //     for counter_set in device.counter_sets() {
-        //         if counter_set.name().to_string() == "timestamp" {
-        //             return Some(counter_set);
-        //         }
-        //     }
-        //     None
-        // }
-        // let counter_set = get_counter_set(&*self.id).unwrap();
-        let desc = mtl::CounterSampleBufferDescriptor::new();
-        desc.set_label(&NSString::from_str("timestamp counter"));
-        desc.set_counter_set(&*counter_set);
-        desc.set_sample_count(2 * sample_count);
-        desc.set_storage_mode(match private {
-            false => mtl::StorageMode::Shared,
-            true => mtl::StorageMode::Private,
-        });
-        let sample_buffer = device
-            .new_counter_sample_buffer_with_descriptor(&desc)
-            .unwrap();
-        let cpu_start_time = mtl::Timestamp::new(0);
-        let gpu_start_time = mtl::Timestamp::new(0);
-        device.sample_timestamps(&cpu_start_time, &gpu_start_time);
-        Self {
-            device,
-            sample_buffer,
-            sample_count,
-            next_start_index: 0,
-            cpu_start_time,
-            gpu_start_time,
-        }
-    }
-    pub(crate) fn get_ref(&self) -> &mtl::CounterSampleBuffer {
-        &*self.sample_buffer
-    }
-    pub(crate) fn get_next_start_index(&mut self) -> usize {
-        assert!(self.next_start_index + 1 < 2 * self.sample_count);
-        let next_start_index = self.next_start_index;
-        self.next_start_index += 2;
-        next_start_index
-    }
-    pub fn get_timestamps(&self) {
-        let cpu_end_time = mtl::Timestamp::new(0);
-        let gpu_end_time = mtl::Timestamp::new(0);
-        self.device
-            .sample_timestamps(&self.cpu_start_time, &self.gpu_start_time);
-        let cpu_time_span = cpu_end_time.value - self.cpu_start_time.value;
-        let gpu_time_span = gpu_end_time.value - self.gpu_start_time.value;
-        let gpu_to_cpu_scaling = cpu_time_span / gpu_time_span;
+    // pub(crate) fn new(device: &'a mtl::Device, sample_count: usize, private: bool) -> Self {
+    //     assert!(device.supports_counter_sampling(mtl::CounterSamplingPoint::StageBoundary));
+    //     let counter_set = device
+    //         .counter_sets()
+    //         .into_iter()
+    //         .find(|counter_set| counter_set.name().to_string() == "timestamp")
+    //         .unwrap();
+    //     // fn get_counter_set() -> Option<Retained<mtl::CounterSet>> {
+    //     //     for counter_set in device.counter_sets() {
+    //     //         if counter_set.name().to_string() == "timestamp" {
+    //     //             return Some(counter_set);
+    //     //         }
+    //     //     }
+    //     //     None
+    //     // }
+    //     // let counter_set = get_counter_set(&*self.id).unwrap();
+    //     let desc = mtl::CounterSampleBufferDescriptor::new();
+    //     desc.set_label(&NSString::from_str("timestamp counter"));
+    //     desc.set_counter_set(&*counter_set);
+    //     desc.set_sample_count(2 * sample_count);
+    //     desc.set_storage_mode(match private {
+    //         false => mtl::StorageMode::Shared,
+    //         true => mtl::StorageMode::Private,
+    //     });
+    //     let sample_buffer = device
+    //         .new_counter_sample_buffer_with_descriptor(&desc)
+    //         .unwrap();
+    //     let cpu_start_time = mtl::Timestamp::new(0);
+    //     let gpu_start_time = mtl::Timestamp::new(0);
+    //     device.sample_timestamps(&cpu_start_time, &gpu_start_time);
+    //     Self {
+    //         device,
+    //         sample_buffer,
+    //         sample_count,
+    //         next_start_index: 0,
+    //         cpu_start_time,
+    //         gpu_start_time,
+    //     }
+    // }
+    // pub(crate) fn get_ref(&self) -> &mtl::CounterSampleBuffer {
+    //     &*self.sample_buffer
+    // }
+    // pub(crate) fn get_next_start_index(&mut self) -> usize {
+    //     assert!(self.next_start_index + 1 < 2 * self.sample_count);
+    //     let next_start_index = self.next_start_index;
+    //     self.next_start_index += 2;
+    //     next_start_index
+    // }
+    // pub fn get_timestamps(&self) {
+    //     let cpu_end_time = mtl::Timestamp::new(0);
+    //     let gpu_end_time = mtl::Timestamp::new(0);
+    //     self.device.sample_timestamps(&cpu_end_time, &gpu_end_time);
+    //     let cpu_time_span = cpu_end_time.value - self.cpu_start_time.value;
+    //     let gpu_time_span = gpu_end_time.value - self.gpu_start_time.value;
+    //     let gpu_to_cpu_scaling = cpu_time_span / gpu_time_span;
 
-        let data = self
-            .sample_buffer
-            .resolve_counter_range(0..2 * self.sample_count);
-        let timestamps: Vec<usize> = data
-            .bytes()
-            .chunks(8)
-            .map(|limbs| {
-                let mut gpu_time = 0;
-                for i in 0..limbs.len() {
-                    gpu_time += limbs[i] as usize * ((1 << 8) as usize).pow(i as u32);
-                }
-                let nanoseconds = self.cpu_start_time.value + gpu_time * gpu_to_cpu_scaling;
-                let microseconds = nanoseconds / (10 as usize).pow(3);
-                // milliseconds
-                microseconds
-                // nanoseconds
-            })
-            .collect();
-        let timespans: Vec<usize> = timestamps.chunks(2).map(|pair| pair[1] - pair[0]).collect();
-        println!("{timespans:?}");
-    }
+    //     let data = self
+    //         .sample_buffer
+    //         .resolve_counter_range(NSRange::from(0..2 * self.sample_count));
+    //     let timestamps: Vec<usize> = data
+    //         .bytes()
+    //         .chunks(8)
+    //         .map(|limbs| {
+    //             let mut gpu_time = 0;
+    //             for i in 0..limbs.len() {
+    //                 gpu_time += limbs[i] as usize * ((1 << 8) as usize).pow(i as u32);
+    //             }
+    //             let nanoseconds = self.cpu_start_time.value + gpu_time * gpu_to_cpu_scaling;
+    //             let microseconds = nanoseconds / (10 as usize).pow(3);
+    //             let milliseconds = microseconds / (10 as usize).pow(3);
+    //             // nanoseconds
+    //             // microseconds
+    //             milliseconds
+    //         })
+    //         .collect();
+    //     let timespans: Vec<usize> = timestamps.chunks(2).map(|pair| pair[1] - pair[0]).collect();
+    //     println!("{timespans:?}");
+    // }
 }

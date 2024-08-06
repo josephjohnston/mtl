@@ -2,14 +2,19 @@
 name = "zpu"
 version = "0.1.0"
 edition = "2021"
-# build = "build.rs"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 hal = { path = "../hal" }
+mtl = { path = "../mtl" }
+objc = { package = "objc2", version = "0.5.2" }
+objc_foundation = { package = "objc2-foundation", version = "0.2.2", features = [
+    "all",
+] }
 rand = "0.8.5"
 num-modular = "0.5.1"
 
-[lib]
+# [lib]
 # crate-type = ["staticlib"]

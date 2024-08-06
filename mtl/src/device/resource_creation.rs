@@ -2,10 +2,10 @@ use super::*;
 
 /// # Working With Resource Heaps
 impl Device {
-    pub fn new_heap_with_descriptor(&self, desc: &HeapDescriptor) -> Id<Heap> {
+    pub fn new_heap_with_descriptor(&self, desc: &HeapDescriptor) -> Retained<Heap> {
         unsafe {
             let raw_heap: *mut Heap = msg_send![self, newHeapWithDescriptor: desc];
-            Id::new(raw_heap).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_heap).expect(ID_NEW_FAILURE)
         }
     }
     pub fn heap_buffer_size_and_align_with_length(
@@ -36,11 +36,15 @@ impl Device {
         unsafe { msg_send![self, maxBufferLength] }
     }
     // [M] newBufferWithLength:options:
-    pub fn new_buffer_with_length(&self, length: usize, options: ResourceOptions) -> Id<Buffer> {
+    pub fn new_buffer_with_length(
+        &self,
+        length: usize,
+        options: ResourceOptions,
+    ) -> Retained<Buffer> {
         unsafe {
             let raw_buffer: *mut Buffer =
                 msg_send![self, newBufferWithLength: length, options: options];
-            Id::new(raw_buffer).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_buffer).expect(ID_NEW_FAILURE)
         }
     }
     // [M] newBufferWithBytes:length:options:
@@ -49,7 +53,7 @@ impl Device {
         pointer: *const c_void,
         length: usize,
         options: ResourceOptions,
-    ) -> Id<Buffer> {
+    ) -> Retained<Buffer> {
         unsafe {
             let raw_buffer: *mut Buffer = msg_send![
                 self,
@@ -57,7 +61,7 @@ impl Device {
                 length: length,
                 options: options
             ];
-            Id::new(raw_buffer).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_buffer).expect(ID_NEW_FAILURE)
         }
     }
     // [M] newBufferWithBytesNoCopy:length:options:deallocator:
@@ -67,7 +71,7 @@ impl Device {
         length: usize,
         options: ResourceOptions,
         deallocator: Option<&block::Block<(*const c_void, usize), ()>>,
-    ) -> Id<Buffer> {
+    ) -> Retained<Buffer> {
         unsafe {
             let raw_buffer: *mut Buffer = msg_send![
                 self,
@@ -76,7 +80,7 @@ impl Device {
                 options: options,
                 deallocator: deallocator
             ];
-            Id::new(raw_buffer).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_buffer).expect(ID_NEW_FAILURE)
         }
     }
 }
@@ -84,10 +88,10 @@ impl Device {
 /// # Creating Textures
 impl Device {
     // [M] newTextureWithDescriptor:
-    pub fn new_texture_with_descriptor(&self, desc: &TextureDescriptor) -> Id<Texture> {
+    pub fn new_texture_with_descriptor(&self, desc: &TextureDescriptor) -> Retained<Texture> {
         unsafe {
             let raw_texture: *mut Texture = msg_send![self, newTextureWithDescriptor: desc];
-            Id::new(raw_texture).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_texture).expect(ID_NEW_FAILURE)
         }
     }
 }

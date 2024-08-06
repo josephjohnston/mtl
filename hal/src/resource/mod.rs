@@ -1,4 +1,15 @@
+//! # Resource
+//!
+
 use super::*;
+
+pub(crate) fn get_gpu_resource_options() -> mtl::ResourceOptions {
+    mtl::ResourceOptions::new(
+        mtl::CPUCacheMode::WriteCombined,
+        mtl::StorageMode::Private,
+        mtl::HazardTrackingMode::Untracked,
+    )
+}
 
 // pub trait Resource {
 //     fn allocated_size(&self) -> usize;

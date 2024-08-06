@@ -3,22 +3,20 @@ use super::*;
 // we pair archives with libraries.
 // a single function descriptor, (compute) pipeline descriptor, and stage input/output descriptor will be associated and reused when necessary.
 
-// const BASE_URL_STR: &str = "file:///Users/josephjohnston/saga/zpu/shaders/";
-
 pub struct Archive<'a> {
-    id: Id<mtl::BinaryArchive>,
+    id: Retained<mtl::BinaryArchive>,
     device: &'a mtl::Device,
-    library: Id<mtl::Library>,
-    func_desc: Id<mtl::FunctionDescriptor>,
-    io_desc: Id<mtl::StageInputOutputDescriptor>,
-    pipeline_desc: Id<mtl::ComputePipelineDescriptor>,
+    library: Retained<mtl::Library>,
+    func_desc: Retained<mtl::FunctionDescriptor>,
+    io_desc: Retained<mtl::StageInputOutputDescriptor>,
+    pipeline_desc: Retained<mtl::ComputePipelineDescriptor>,
 }
 impl<'a> Archive<'a> {
     pub(crate) fn new(
         device: &'a mtl::Device,
         desc: &mtl::BinaryArchiveDescriptor,
         name: String,
-        shaders_url_str: &str, //String,
+        shaders_url_str: &str,
         serialize: bool,
     ) -> Self {
         let name_str = &*name;
@@ -37,7 +35,7 @@ impl<'a> Archive<'a> {
         device: &'a mtl::Device,
         desc: &mtl::BinaryArchiveDescriptor,
         name: String,
-        shaders_url_str: &str, //String,
+        shaders_url_str: &str,
     ) -> Self {
         let shaders_url = &Self::get_shaders_url(shaders_url_str);
         Self::inner_new(device, desc, &*name, true, shaders_url)
@@ -52,32 +50,29 @@ impl<'a> Archive<'a> {
             .library
             .new_function_with_name(&NSString::from_str(&*func_name));
         self.pipeline_desc.set_compute_function(&func);
-        let archives = NSArray::from_vec(vec![self.id.clone()]);
-        self.pipeline_desc.set_binary_archives(&archives);
+        // // let s = self.id.clone();
+        // let s = vec![&*self.id];
+        // let t = &s[..];
+        // let archives = NSArray::from_slice(&t);
+        // self.pipeline_desc.set_binary_archives(&archives);
         Pipeline::new(self.device, &self.pipeline_desc)
     }
     // we'll have all shader related stuff in a folder with url get_base_url()
-    fn get_shaders_url(shaders_url_string: &str) -> Id<NSURL> {
-        let base_url = NSURL::url_with_string(&NSString::from_str(shaders_url_string));
-        base_url
+    fn get_shaders_url(shaders_url_string: &str) -> Retained<NSURL> {
+        let ns_string = NSString::from_str(shaders_url_string);
+        unsafe { NSURL::URLWithString(&ns_string).unwrap() }
     }
     // inside the shader folder, we'll have libraries as files with <lib_name>.metallib.
-    fn get_library_url(shaders_url: &NSURL, name_str: &str) -> Id<NSURL> {
-        let library_url = NSURL::url_with_string_relative_to_url(
-            &NSString::from_str(&*format!("{}{}", name_str, ".metallib")),
-            shaders_url,
-        );
-        library_url
+    fn get_library_url(shaders_url: &NSURL, name_str: &str) -> Retained<NSURL> {
+        let ns_string = NSString::from_str(&*format!("{}{}", name_str, ".metallib"));
+        unsafe { NSURL::URLWithString_relativeToURL(&ns_string, Some(shaders_url)).unwrap() }
     }
     // inside the shader folder, we have an archive folder, with an archive as <lib_name>.metallib.
-    fn get_archive_url(shaders_url: &NSURL, name_str: &str) -> Id<NSURL> {
-        let archive_url = NSURL::url_with_string_relative_to_url(
-            &NSString::from_str(&*format!("archives/{}{}", name_str, ".metallib")),
-            shaders_url, // &Self::get_base_url(self),
-        );
-        archive_url
+    fn get_archive_url(shaders_url: &NSURL, name_str: &str) -> Retained<NSURL> {
+        let ns_string = NSString::from_str(&*format!("archives/{}{}", name_str, ".metallib"));
+        unsafe { NSURL::URLWithString_relativeToURL(&ns_string, Some(shaders_url)).unwrap() }
     }
-    // creates library and descriptors, and set universal properties.
+    // creates library and descriptors, and sets universal properties.
     fn inner_new<'b>(
         device: &'a mtl::Device,
         desc: &mtl::BinaryArchiveDescriptor,
@@ -86,7 +81,7 @@ impl<'a> Archive<'a> {
         shaders_url: &NSURL,
     ) -> Self {
         let label = NSString::from_str(name_str);
-        // archive
+        // Archive
         // shouldn't be using the desc more than once, so no need to reset
         if loading {
             desc.set_url(&Self::get_archive_url(shaders_url, name_str));
@@ -94,7 +89,7 @@ impl<'a> Archive<'a> {
         let id = device.new_binary_archive_with_descriptor(&desc).unwrap();
         id.set_label(&label);
 
-        // library
+        // Library
         // let bundle = Bundle::get_bundle().unwrap();
         // let library_url = bundle
         //     .url_for_resource(

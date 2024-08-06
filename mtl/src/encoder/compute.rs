@@ -4,7 +4,7 @@ use super::*;
 declare!(ComputePassDescriptor);
 impl ComputePassDescriptor {
     // [M] computePassDescriptor
-    pub fn compute_pass_descriptor() -> Id<ComputePassDescriptor> {
+    pub fn compute_pass_descriptor() -> Retained<ComputePassDescriptor> {
         unsafe { msg_send_id![class!(MTLComputePassDescriptor), computePassDescriptor] }
     }
     // [P] dispatchType and setDispatchType
@@ -17,7 +17,7 @@ impl ComputePassDescriptor {
     // [P] sampleBufferAttachments
     pub fn sample_buffer_attachments(
         &self,
-    ) -> Id<ComputePassSampleBufferAttachmentDescriptorArray> {
+    ) -> Retained<ComputePassSampleBufferAttachmentDescriptorArray> {
         unsafe { msg_send_id![self, sampleBufferAttachments] }
     }
 }

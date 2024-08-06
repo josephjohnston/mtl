@@ -6,7 +6,7 @@ declare!(Heap);
 impl Label for Heap {}
 impl Heap {
     // [P] device
-    pub fn device(&self) -> Id<Device> {
+    pub fn device(&self) -> Retained<Device> {
         unsafe { msg_send_id![self, device] }
     }
 }
@@ -44,11 +44,11 @@ impl Heap {
         &self,
         length: usize,
         options: ResourceOptions,
-    ) -> Option<Id<Buffer>> {
+    ) -> Option<Retained<Buffer>> {
         unsafe {
             let raw_buffer: *mut Buffer =
                 msg_send![self, newBufferWithLength: length, options: options];
-            Id::new(raw_buffer)
+            Retained::from_raw(raw_buffer)
         }
     }
     // [M] newBufferWithLength:options:offset:
@@ -57,7 +57,7 @@ impl Heap {
         length: usize,
         options: ResourceOptions,
         offset: usize,
-    ) -> Id<Buffer> {
+    ) -> Retained<Buffer> {
         unsafe {
             let raw_buffer: *mut Buffer = msg_send![
                 self,
@@ -65,17 +65,17 @@ impl Heap {
                 options: options,
                 offset: offset
             ];
-            Id::new(raw_buffer).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_buffer).expect(ID_NEW_FAILURE)
         }
     }
     // [M] newTextureWithDescriptor:
     pub fn new_texture_with_descriptor(
         &self,
         descriptor: &TextureDescriptor,
-    ) -> Option<Id<Texture>> {
+    ) -> Option<Retained<Texture>> {
         unsafe {
             let raw_texture: *mut Texture = msg_send![self, newTextureWithDescriptor: descriptor];
-            Id::new(raw_texture)
+            Retained::from_raw(raw_texture)
         }
     }
     // [M] newTextureWithDescriptor:offset:
@@ -83,11 +83,11 @@ impl Heap {
         &self,
         descriptor: &TextureDescriptor,
         offset: usize,
-    ) -> Id<Texture> {
+    ) -> Retained<Texture> {
         unsafe {
             let raw_texture: *mut Texture =
                 msg_send![self, newTextureWithDescriptor: descriptor, offset: offset];
-            Id::new(raw_texture).expect(ID_NEW_FAILURE)
+            Retained::from_raw(raw_texture).expect(ID_NEW_FAILURE)
         }
     }
 }
